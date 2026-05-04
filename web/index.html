@@ -121,6 +121,16 @@
         </p>
         <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
       </section>
+
+      <section class="card">
+        <h2>TVL over time (TRY)</h2>
+        <p class="sub">
+          TRY = supply × NAV. Same series as the USD chart above, but priced
+          in lira instead of dollars — useful for spotting protocol-level
+          growth independent of FX moves.
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-tvl-try"></canvas></div>
+      </section>
     </main>
 
     <div class="meta" id="meta"></div>
@@ -293,6 +303,54 @@
                       : v >= 1e3
                         ? `$${(v / 1e3).toFixed(1)}K`
                         : `$${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-tvl-try").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "iTRY TVL (TRY)",
+                data: data.iTryTvlTry || data.iTryTvlUsdc,
+                borderColor: "#34d399",
+                backgroundColor: "rgba(52,211,153,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "wiTRY TVL (TRY)",
+                data: data.wiTryTvlTry || data.wiTryTvlUsdc,
+                borderColor: "#f472b6",
+                backgroundColor: "rgba(244,114,182,0.15)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                title: { display: true, text: "TRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `₺${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `₺${(v / 1e3).toFixed(1)}K`
+                        : `₺${v}`,
                 },
                 grid: { color: "rgba(255,255,255,0.04)" },
               },
