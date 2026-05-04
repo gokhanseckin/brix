@@ -171,12 +171,12 @@ async function etherscan(params) {
       continue;
     }
     if (body.status === "1") return body.result;
-    // Etherscan returns status="0" with message="No records found" for empty
-    // result sets — treat as success with empty array.
+    // Etherscan returns status="0" with various "No ... found" messages and an
+    // empty-array result for empty result sets — treat as success.
     if (
       body.status === "0" &&
-      typeof body.message === "string" &&
-      body.message.toLowerCase().includes("no records")
+      Array.isArray(body.result) &&
+      body.result.length === 0
     ) {
       return [];
     }
