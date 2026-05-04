@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>brix.money — wiTRY / iTRY history</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d11;
+        --panel: #14181f;
+        --fg: #e5e7eb;
+        --muted: #8b93a1;
+        --accent-1: #60a5fa;
+        --accent-2: #f59e0b;
+        --accent-3: #34d399;
+        --accent-4: #f472b6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      header {
+        padding: 24px 32px 8px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+      header code {
+        color: var(--fg);
+        background: var(--panel);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      main {
+        display: grid;
+        gap: 24px;
+        padding: 16px 32px 32px;
+      }
+      .card {
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 16px 20px 20px;
+        border: 1px solid #1f242c;
+      }
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .card .sub {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .canvas-wrap {
+        position: relative;
+        height: 380px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+        font-size: 12px;
+        color: var(--muted);
+        padding: 0 32px 24px;
+      }
+      .meta b {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      #error {
+        margin: 16px 32px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #3f1d1d;
+        color: #fca5a5;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>brix.money — wiTRY / iTRY daily history</h1>
+      <p>
+        Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
+        iTRY through NAV-driven supply expansion forwarded into the vault.
+      </p>
+    </header>
+
+    <div id="error"></div>
+
+    <main>
+      <section class="card">
+        <h2>1 wiTRY share value over time</h2>
+        <p class="sub">
+          Left axis: iTRY per share (<code>totalAssets / totalSupply</code>).
+          Right axis: USDC per share (left × NAV).
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-share"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>TVL over time</h2>
+        <p class="sub">
+          USDC = supply × NAV. iTRY TVL is the entire circulating iTRY priced
+          at NAV; wiTRY TVL is just the iTRY held inside the vault.
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
+      </section>
+    </main>
+
+    <div class="meta" id="meta"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script>
+      const errBox = document.getElementById("error");
+      const showError = (msg) => {
+        errBox.style.display = "block";
+        errBox.textContent = msg;
+      };
+
+      const fmtUsd = (v) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              maximumFractionDigits: v < 1 ? 4 : 2,
+            }).format(v);
+      const fmtNum = (v) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              maximumFractionDigits: 6,
+            }).format(v);
+
+      const baseOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#e5e7eb" } },
+          tooltip: { backgroundColor: "#0b0d11", borderColor: "#1f242c", borderWidth: 1 },
+        },
+        scales: {
+          x: {
+            type: "time",
+            time: { unit: "day", tooltipFormat: "yyyy-MM-dd" },
+            ticks: { color: "#8b93a1", maxRotation: 0, autoSkip: true },
+            grid: { color: "rgba(255,255,255,0.04)" },
+          },
+        },
+      };
+
+      async function load() {
+        let data;
+        try {
+          const res = await fetch("./snapshots.json");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = await res.json();
+        } catch (e) {
+          showError(
+            `Could not load snapshots.json (${e.message}). Run \`npm run fetch\` first.`,
+          );
+          return;
+        }
+
+        const xs = data.days;
+        const last = xs.length - 1;
+
+        document.getElementById("meta").innerHTML = `
+          <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
+          <span>Range <b>${xs[0]} → ${xs[last]}</b> (${xs.length} days)</span>
+          <span>NAV event <b>${data.navEvent}</b></span>
+          <span>Latest NAV <b>${fmtUsd(data.navUsd[last])}</b></span>
+          <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
+          <span>iTRY TVL <b>${fmtUsd(data.iTryTvlUsdc[last])}</b></span>
+          <span>wiTRY TVL <b>${fmtUsd(data.wiTryTvlUsdc[last])}</b></span>
+        `;
+
+        new Chart(document.getElementById("chart-share").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "wiTRY value (iTRY)",
+                data: data.wiTryPerITry,
+                borderColor: "#60a5fa",
+                backgroundColor: "rgba(96,165,250,0.1)",
+                yAxisID: "yITRY",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+              },
+              {
+                label: "wiTRY value (USDC)",
+                data: data.wiTryUsdc,
+                borderColor: "#f59e0b",
+                backgroundColor: "rgba(245,158,11,0.1)",
+                yAxisID: "yUSDC",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              yITRY: {
+                position: "left",
+                title: { display: true, text: "iTRY per wiTRY", color: "#8b93a1" },
+                ticks: { color: "#8b93a1" },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+              yUSDC: {
+                position: "right",
+                title: { display: true, text: "USDC per wiTRY", color: "#8b93a1" },
+                ticks: { color: "#8b93a1" },
+                grid: { drawOnChartArea: false },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-tvl").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "iTRY TVL (USDC)",
+                data: data.iTryTvlUsdc,
+                borderColor: "#34d399",
+                backgroundColor: "rgba(52,211,153,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "wiTRY TVL (USDC)",
+                data: data.wiTryTvlUsdc,
+                borderColor: "#f472b6",
+                backgroundColor: "rgba(244,114,182,0.15)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                title: { display: true, text: "USDC", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `$${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `$${(v / 1e3).toFixed(1)}K`
+                        : `$${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+            },
+          },
+        });
+      }
+
+      load();
+    </script>
+  </body>
+</html>
