@@ -105,7 +105,8 @@
         <h2>1 wiTRY share value over time</h2>
         <p class="sub">
           Left axis: iTRY per share (<code>totalAssets / totalSupply</code>).
-          Right axis: USDC per share (left × NAV).
+          Right axis: TRY per share (left × NAV). NAV is currently a constant
+          peg of 1.0 TRY per iTRY, so both lines coincide until it moves.
         </p>
         <div class="canvas-wrap"><canvas id="chart-share"></canvas></div>
       </section>
@@ -113,8 +114,8 @@
       <section class="card">
         <h2>TVL over time</h2>
         <p class="sub">
-          USDC = supply × NAV. iTRY TVL is the entire circulating iTRY priced
-          at NAV; wiTRY TVL is just the iTRY held inside the vault.
+          TRY = supply × NAV. iTRY TVL is the entire circulating iTRY at NAV;
+          wiTRY TVL is just the iTRY held inside the vault.
         </p>
         <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
       </section>
@@ -131,12 +132,12 @@
         errBox.textContent = msg;
       };
 
-      const fmtUsd = (v) =>
+      const fmtTry = (v) =>
         v == null
           ? "—"
           : new Intl.NumberFormat("en-US", {
               style: "currency",
-              currency: "USD",
+              currency: "TRY",
               maximumFractionDigits: v < 1 ? 4 : 2,
             }).format(v);
       const fmtNum = (v) =>
@@ -183,11 +184,11 @@
         document.getElementById("meta").innerHTML = `
           <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
           <span>Range <b>${xs[0]} → ${xs[last]}</b> (${xs.length} days)</span>
-          <span>NAV event <b>${data.navEvent}</b></span>
-          <span>Latest NAV <b>${fmtUsd(data.navUsd[last])}</b></span>
+          <span>NAV method <b>${data.navMethod ? data.navMethod.signature : data.navEvent}</b></span>
+          <span>Latest NAV <b>${fmtTry(data.navUsd[last])} per iTRY</b></span>
           <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
-          <span>iTRY TVL <b>${fmtUsd(data.iTryTvlUsdc[last])}</b></span>
-          <span>wiTRY TVL <b>${fmtUsd(data.wiTryTvlUsdc[last])}</b></span>
+          <span>iTRY TVL <b>${fmtTry(data.iTryTvlUsdc[last])}</b></span>
+          <span>wiTRY TVL <b>${fmtTry(data.wiTryTvlUsdc[last])}</b></span>
         `;
 
         new Chart(document.getElementById("chart-share").getContext("2d"), {
@@ -206,11 +207,11 @@
                 tension: 0.1,
               },
               {
-                label: "wiTRY value (USDC)",
+                label: "wiTRY value (TRY)",
                 data: data.wiTryUsdc,
                 borderColor: "#f59e0b",
                 backgroundColor: "rgba(245,158,11,0.1)",
-                yAxisID: "yUSDC",
+                yAxisID: "yTRY",
                 borderWidth: 2,
                 pointRadius: 0,
                 tension: 0.1,
@@ -227,9 +228,9 @@
                 ticks: { color: "#8b93a1" },
                 grid: { color: "rgba(255,255,255,0.04)" },
               },
-              yUSDC: {
+              yTRY: {
                 position: "right",
-                title: { display: true, text: "USDC per wiTRY", color: "#8b93a1" },
+                title: { display: true, text: "TRY per wiTRY", color: "#8b93a1" },
                 ticks: { color: "#8b93a1" },
                 grid: { drawOnChartArea: false },
               },
@@ -243,7 +244,7 @@
             labels: xs,
             datasets: [
               {
-                label: "iTRY TVL (USDC)",
+                label: "iTRY TVL (TRY)",
                 data: data.iTryTvlUsdc,
                 borderColor: "#34d399",
                 backgroundColor: "rgba(52,211,153,0.1)",
@@ -253,7 +254,7 @@
                 fill: true,
               },
               {
-                label: "wiTRY TVL (USDC)",
+                label: "wiTRY TVL (TRY)",
                 data: data.wiTryTvlUsdc,
                 borderColor: "#f472b6",
                 backgroundColor: "rgba(244,114,182,0.15)",
@@ -269,15 +270,15 @@
             scales: {
               ...baseOptions.scales,
               y: {
-                title: { display: true, text: "USDC", color: "#8b93a1" },
+                title: { display: true, text: "TRY", color: "#8b93a1" },
                 ticks: {
                   color: "#8b93a1",
                   callback: (v) =>
                     v >= 1e6
-                      ? `$${(v / 1e6).toFixed(1)}M`
+                      ? `₺${(v / 1e6).toFixed(1)}M`
                       : v >= 1e3
-                        ? `$${(v / 1e3).toFixed(1)}K`
-                        : `$${v}`,
+                        ? `₺${(v / 1e3).toFixed(1)}K`
+                        : `₺${v}`,
                 },
                 grid: { color: "rgba(255,255,255,0.04)" },
               },
