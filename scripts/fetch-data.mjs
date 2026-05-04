@@ -288,6 +288,78 @@ async function getAllLogs(label, address, topics, startBlock) {
   return cached.logs;
 }
 
+// Fetch all transactions to `address` whose input begins with `selector`,
+// merging external (txlist) and internal (txlistinternal) call traces. Used
+// for oracles that update via setter calls without emitting events.
+async function getAllTxsTo(label, address, selector, startBlock) {
+  const cachePath = resolve(DATA_DIR, `txs-${label}.json`);
+  let cached = { fromBlock: startBlock, txs: [] };
+  if (existsSync(cachePath)) {
+    cached = JSON.parse(readFileSync(cachePath, "utf8"));
+    if (cached.fromBlock < startBlock) cached.fromBlock = startBlock;
+  }
+  const seen = new Set(
+    cached.txs.map((t) => `${t.hash}:${t.traceId || ""}`),
+  );
+  const baseCursor = cached.fromBlock;
+  console.log(`  [${label}] starting from block ${baseCursor}`);
+
+  const sources = [
+    { module: "account", action: "txlist" },
+    { module: "account", action: "txlistinternal" },
+  ];
+  for (const src of sources) {
+    let cursor = baseCursor;
+    while (true) {
+      const page = await etherscan({
+        ...src,
+        address,
+        startblock: String(cursor),
+        endblock: "99999999",
+        sort: "asc",
+        page: "1",
+        offset: "10000",
+      });
+      if (!page.length) break;
+      let added = 0;
+      let maxBlock = cursor;
+      for (const tx of page) {
+        if (tx.isError === "1") continue;
+        if (!tx.to || tx.to.toLowerCase() !== address.toLowerCase()) continue;
+        if (!tx.input || !tx.input.startsWith(selector)) continue;
+        const key = `${tx.hash}:${tx.traceId || ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cached.txs.push({
+          blockNumber: parseInt(tx.blockNumber, 10),
+          timeStamp: parseInt(tx.timeStamp, 10),
+          input: tx.input,
+          hash: tx.hash,
+          traceId: tx.traceId || "",
+        });
+        added++;
+        const bn = parseInt(tx.blockNumber, 10);
+        if (bn > maxBlock) maxBlock = bn;
+      }
+      console.log(
+        `  [${label}/${src.action}] page=${page.length} new=${added} block=${maxBlock}`,
+      );
+      if (page.length < 10000) break;
+      if (maxBlock <= cursor) break;
+      cursor = maxBlock;
+    }
+  }
+  cached.fromBlock = cached.txs.length
+    ? Math.max(...cached.txs.map((t) => t.blockNumber)) + 1
+    : baseCursor;
+  cached.txs.sort(
+    (a, b) =>
+      a.blockNumber - b.blockNumber || a.hash.localeCompare(b.hash),
+  );
+  writeFileSync(cachePath, JSON.stringify(cached));
+  return cached.txs;
+}
+
 // ---------- ABI helpers --------------------------------------------------
 
 function canonicalType(input) {
@@ -309,8 +381,6 @@ function eventTopic(ev) {
 
 function findUpdateEvent(abi) {
   const events = abi.filter((x) => x.type === "event" && !x.anonymous);
-  // Prefer a name that clearly signals a price/NAV update; fall back to any
-  // event whose first non-indexed argument is a uint/int.
   const ranked = events
     .map((ev) => {
       const name = ev.name.toLowerCase();
@@ -318,7 +388,7 @@ function findUpdateEvent(abi) {
       if (/answerupdated/.test(name)) score += 10;
       if (/nav/.test(name)) score += 8;
       if (/price/.test(name)) score += 5;
-      if (/update|publish|set/.test(name)) score += 3;
+      if (/update|publish|set/.test(name) && !/owner/.test(name)) score += 3;
       if (/round/.test(name)) score += 1;
       const firstNonIndexed = ev.inputs.find((i) => !i.indexed);
       if (
@@ -331,10 +401,49 @@ function findUpdateEvent(abi) {
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
-  if (!ranked.length) {
-    throw new Error("Could not identify NAV update event in ABI");
-  }
-  return ranked[0].ev;
+  return ranked.length ? ranked[0].ev : null;
+}
+
+// Setter-function fallback for oracles that don't emit events on update.
+function findUpdateFunction(abi) {
+  const fns = abi.filter(
+    (x) =>
+      x.type === "function" &&
+      x.stateMutability !== "view" &&
+      x.stateMutability !== "pure" &&
+      !/^(renounce|transfer)ownership$/i.test(x.name || ""),
+  );
+  const ranked = fns
+    .map((fn) => {
+      const name = (fn.name || "").toLowerCase();
+      let score = 0;
+      if (/^(setprice|setnav|setanswer|push|submit)/.test(name)) score += 10;
+      if (/^update/.test(name)) score += 6;
+      if (/^set/.test(name)) score += 3;
+      if (/price|nav|answer|value/.test(name)) score += 4;
+      const firstArg = fn.inputs[0];
+      if (firstArg && /^(u?int)(\d+)?$/.test(firstArg.type)) score += 2;
+      return { fn, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return ranked.length ? ranked[0].fn : null;
+}
+
+function functionSignature(fn) {
+  return `${fn.name}(${fn.inputs.map(canonicalType).join(",")})`;
+}
+
+function functionSelector(fn) {
+  // First 4 bytes of keccak256(signature) → "0x" + 8 hex chars.
+  return keccak256Hex(functionSignature(fn)).slice(0, 10);
+}
+
+// Decode a 256-bit unsigned integer from a tx's input data, where `slot` is
+// the zero-indexed 32-byte argument slot after the 4-byte selector.
+function decodeUint256At(input, slot) {
+  const start = 2 + 8 + slot * 64;
+  return BigInt("0x" + input.slice(start, start + 64));
 }
 
 // Decode the first non-indexed argument of an event log as a 256-bit integer.
@@ -384,28 +493,50 @@ async function main() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
   if (!existsSync(WEB_DIR)) mkdirSync(WEB_DIR, { recursive: true });
 
-  console.log("Discovering NAV feed event signature...");
+  console.log("Discovering NAV feed update method...");
   const navAbi = await getAbi(NAV_FEED);
   const navEvent = findUpdateEvent(navAbi);
-  const navTopic = eventTopic(navEvent);
-  console.log(`  NAV event: ${eventSignature(navEvent)}`);
-  console.log(`  topic0   : ${navTopic}`);
+  let navMethod;
+  if (navEvent) {
+    navMethod = {
+      kind: "event",
+      item: navEvent,
+      signature: eventSignature(navEvent),
+      selector: eventTopic(navEvent),
+    };
+  } else {
+    const fn = findUpdateFunction(navAbi);
+    if (!fn) throw new Error("Could not identify NAV update method");
+    navMethod = {
+      kind: "function",
+      item: fn,
+      signature: functionSignature(fn),
+      selector: functionSelector(fn),
+    };
+  }
+  console.log(`  NAV ${navMethod.kind}: ${navMethod.signature}`);
+  console.log(`  selector  : ${navMethod.selector}`);
 
   console.log("Reading on-chain decimals...");
   // selector for decimals(): 0x313ce567
   let itryDecimals = 18;
-  let navDecimals = 8;
   try {
     const r = await ethCall(ITRY, "0x313ce567");
     if (r && r !== "0x") itryDecimals = parseInt(r, 16);
   } catch (e) {
     console.warn(`  iTRY decimals lookup failed (${e.message}); assuming 18`);
   }
-  try {
-    const r = await ethCall(NAV_FEED, "0x313ce567");
-    if (r && r !== "0x") navDecimals = parseInt(r, 16);
-  } catch (e) {
-    console.warn(`  NAV decimals lookup failed (${e.message}); assuming 8`);
+  // NAV decimals: if the contract exposes decimals() use it; otherwise default
+  // to 18, overridable via NAV_DECIMALS env var.
+  let navDecimals = 18;
+  const navDecimalsOverride = parseInt(process.env.NAV_DECIMALS || "", 10);
+  if (Number.isFinite(navDecimalsOverride)) {
+    navDecimals = navDecimalsOverride;
+  } else {
+    try {
+      const r = await ethCall(NAV_FEED, "0x313ce567");
+      if (r && r !== "0x" && r.length >= 66) navDecimals = parseInt(r, 16);
+    } catch {}
   }
   console.log(`  iTRY decimals=${itryDecimals}, NAV decimals=${navDecimals}`);
 
@@ -422,12 +553,49 @@ async function main() {
   );
   console.log(`  earliest deployment block: ${startBlock}`);
 
-  console.log("Fetching event logs (cached under ./data)...");
-  const [itryTransfers, witryTransfers, navUpdates] = [
-    await getAllLogs("itry-transfer", ITRY, [TRANSFER_TOPIC], startBlock),
-    await getAllLogs("witry-transfer", WITRY, [TRANSFER_TOPIC], startBlock),
-    await getAllLogs("nav-update", NAV_FEED, [navTopic], startBlock),
-  ];
+  console.log("Fetching iTRY/wiTRY transfer logs (cached under ./data)...");
+  const itryTransfers = await getAllLogs(
+    "itry-transfer",
+    ITRY,
+    [TRANSFER_TOPIC],
+    startBlock,
+  );
+  const witryTransfers = await getAllLogs(
+    "witry-transfer",
+    WITRY,
+    [TRANSFER_TOPIC],
+    startBlock,
+  );
+
+  console.log("Fetching NAV update history...");
+  let navUpdates;
+  if (navMethod.kind === "event") {
+    const logs = await getAllLogs(
+      "nav-update",
+      NAV_FEED,
+      [navMethod.selector],
+      startBlock,
+    );
+    navUpdates = logs.map((log) => ({
+      blockNumber: parseInt(log.blockNumber, 16),
+      logIndex: parseInt(log.logIndex, 16),
+      timeStamp: parseInt(log.timeStamp, 16),
+      value: decodeFirstNonIndexed(navMethod.item, log),
+    }));
+  } else {
+    const txs = await getAllTxsTo(
+      "nav-setprice",
+      NAV_FEED,
+      navMethod.selector,
+      startBlock,
+    );
+    navUpdates = txs.map((tx) => ({
+      blockNumber: tx.blockNumber,
+      logIndex: 0,
+      timeStamp: tx.timeStamp,
+      value: decodeUint256At(tx.input, 0),
+    }));
+  }
   console.log(
     `  iTRY transfers=${itryTransfers.length}, wiTRY transfers=${witryTransfers.length}, NAV updates=${navUpdates.length}`,
   );
@@ -435,24 +603,38 @@ async function main() {
   console.log("Replaying events into daily snapshots...");
   const witryAddrLower = WITRY.toLowerCase();
 
-  // Tag and merge into a single ordered stream.
+  function fromLog(kind, log) {
+    return {
+      kind,
+      blockNumber: parseInt(log.blockNumber, 16),
+      logIndex: parseInt(log.logIndex, 16),
+      timeStamp: parseInt(log.timeStamp, 16),
+      log,
+    };
+  }
   const stream = [];
-  for (const l of itryTransfers) stream.push({ kind: "itry", log: l });
-  for (const l of witryTransfers) stream.push({ kind: "witry", log: l });
-  for (const l of navUpdates) stream.push({ kind: "nav", log: l });
-  stream.sort((a, b) => {
-    const ba = parseInt(a.log.blockNumber, 16);
-    const bb = parseInt(b.log.blockNumber, 16);
-    if (ba !== bb) return ba - bb;
-    return parseInt(a.log.logIndex, 16) - parseInt(b.log.logIndex, 16);
-  });
+  for (const l of itryTransfers) stream.push(fromLog("itry", l));
+  for (const l of witryTransfers) stream.push(fromLog("witry", l));
+  for (const u of navUpdates) {
+    stream.push({
+      kind: "nav",
+      blockNumber: u.blockNumber,
+      logIndex: u.logIndex,
+      timeStamp: u.timeStamp,
+      value: u.value,
+    });
+  }
+  stream.sort(
+    (a, b) =>
+      a.blockNumber - b.blockNumber || a.logIndex - b.logIndex,
+  );
 
-  let itrySupply = 0n; // total iTRY in circulation (in wei units)
+  let itrySupply = 0n; // total iTRY in circulation (wei units)
   let witryAssets = 0n; // iTRY held by wiTRY
   let witrySupply = 0n; // total wiTRY shares
-  let navWei = 0n; // last NAV value (in NAV-decimal units)
+  let navWei = 0n; // last NAV value (NAV-decimal units)
 
-  const snapshots = []; // [{day, itrySupply, witryAssets, witrySupply, navWei}]
+  const snapshots = [];
   let lastDay = null;
 
   function flushTo(day) {
@@ -473,10 +655,7 @@ async function main() {
   }
 
   for (const ev of stream) {
-    const ts = parseInt(ev.log.timeStamp, 16);
-    const d = dayOf(ts);
-    flushTo(d);
-
+    flushTo(dayOf(ev.timeStamp));
     if (ev.kind === "itry") {
       const from = "0x" + ev.log.topics[1].slice(26);
       const to = "0x" + ev.log.topics[2].slice(26);
@@ -492,11 +671,7 @@ async function main() {
       if (from === ZERO) witrySupply += amount;
       if (to === ZERO) witrySupply -= amount;
     } else if (ev.kind === "nav") {
-      try {
-        navWei = decodeFirstNonIndexed(navEvent, ev.log);
-      } catch (e) {
-        console.warn(`  NAV decode failed at block ${ev.log.blockNumber}: ${e.message}`);
-      }
+      navWei = ev.value;
     }
   }
 
@@ -538,7 +713,8 @@ async function main() {
     chain: "ethereum",
     contracts: { iTRY: ITRY, wiTRY: WITRY, navFeed: NAV_FEED },
     decimals: { iTRY: itryDecimals, NAV: navDecimals },
-    navEvent: eventSignature(navEvent),
+    navMethod: { kind: navMethod.kind, signature: navMethod.signature },
+    navEvent: navMethod.signature,
     days,
     wiTryPerITry,
     wiTryUsdc,
