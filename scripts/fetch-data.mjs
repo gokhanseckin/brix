@@ -213,6 +213,33 @@ async function getAbi(address) {
   return JSON.parse(r);
 }
 
+// Daily TRY→USD reference rates from the ECB via api.frankfurter.dev. Used
+// to express TRY-denominated TVL as USD on the chart. Free, no API key.
+// Honours a TRY_USD env override (flat rate) when set.
+async function fetchTryUsdRates(startDate, endDate) {
+  const flat = parseFloat(process.env.TRY_USD || "");
+  if (Number.isFinite(flat) && flat > 0) {
+    console.log(`  using flat TRY/USD = ${flat} from TRY_USD env`);
+    return { kind: "flat", rate: flat };
+  }
+  const url = `https://api.frankfurter.dev/v1/${startDate}..${endDate}?base=TRY&symbols=USD`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url);
+      const body = await res.json();
+      if (body && body.rates && Object.keys(body.rates).length) {
+        return { kind: "daily", rates: body.rates };
+      }
+      throw new Error(`unexpected payload: ${JSON.stringify(body).slice(0, 200)}`);
+    } catch (err) {
+      console.warn(`  Frankfurter attempt ${attempt + 1} failed: ${err.message}`);
+      if (attempt === 2) return null;
+      await new Promise((r) => setTimeout(r, 600 * 2 ** attempt));
+    }
+  }
+  return null;
+}
+
 async function ethCall(to, data) {
   return etherscan({
     module: "proxy",
@@ -697,15 +724,50 @@ async function main() {
   const wiTryPerITry = snapshots.map((s) =>
     s.witrySupply === 0n ? null : Number((s.witryAssets * 10n ** 18n) / s.witrySupply) / 1e18,
   );
-  const navUsd = snapshots.map((s) => bigToFloat(s.navWei, navDecimals));
-  const wiTryUsdc = snapshots.map((s, i) =>
-    wiTryPerITry[i] === null ? null : wiTryPerITry[i] * navUsd[i],
+  const navTry = snapshots.map((s) => bigToFloat(s.navWei, navDecimals));
+  const wiTryTry = snapshots.map((s, i) =>
+    wiTryPerITry[i] === null ? null : wiTryPerITry[i] * navTry[i],
   );
-  const iTryTvlUsdc = snapshots.map((s, i) =>
-    bigToFloat(s.itrySupply, itryDecimals) * navUsd[i],
+  const iTryTvlTry = snapshots.map((s, i) =>
+    bigToFloat(s.itrySupply, itryDecimals) * navTry[i],
   );
-  const wiTryTvlUsdc = snapshots.map((s, i) =>
-    bigToFloat(s.witryAssets, itryDecimals) * navUsd[i],
+  const wiTryTvlTry = snapshots.map((s, i) =>
+    bigToFloat(s.witryAssets, itryDecimals) * navTry[i],
+  );
+
+  console.log("Fetching TRY/USD daily rates from Frankfurter (ECB)...");
+  const fx = await fetchTryUsdRates(days[0], days[days.length - 1]);
+  const usdPerTry = new Array(days.length).fill(null);
+  if (fx && fx.kind === "flat") {
+    usdPerTry.fill(fx.rate);
+  } else if (fx && fx.kind === "daily") {
+    let last = null;
+    for (let i = 0; i < days.length; i++) {
+      const r = fx.rates[days[i]];
+      if (r && typeof r.USD === "number") last = r.USD;
+      usdPerTry[i] = last;
+    }
+    // Backfill leading nulls (chart starts before first ECB rate) with the
+    // first known rate so the USD series has no gaps.
+    const firstKnown = usdPerTry.find((v) => v != null);
+    for (let i = 0; i < usdPerTry.length; i++) {
+      if (usdPerTry[i] == null) usdPerTry[i] = firstKnown;
+    }
+    console.log(`  got ${Object.keys(fx.rates).length} ECB business-day rates`);
+  } else {
+    console.warn(
+      "  No TRY/USD rates available — USD series will be null. Pass TRY_USD=<rate> env to override.",
+    );
+  }
+
+  const wiTryUsd = wiTryTry.map((v, i) =>
+    v == null || usdPerTry[i] == null ? null : v * usdPerTry[i],
+  );
+  const iTryTvlUsd = iTryTvlTry.map((v, i) =>
+    usdPerTry[i] == null ? null : v * usdPerTry[i],
+  );
+  const wiTryTvlUsd = wiTryTvlTry.map((v, i) =>
+    usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
 
   const out = {
@@ -715,19 +777,29 @@ async function main() {
     decimals: { iTRY: itryDecimals, NAV: navDecimals },
     navMethod: { kind: navMethod.kind, signature: navMethod.signature },
     navEvent: navMethod.signature,
+    fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
     days,
     wiTryPerITry,
-    wiTryUsdc,
-    navUsd,
-    iTryTvlUsdc,
-    wiTryTvlUsdc,
+    navTry,
+    wiTryTry,
+    iTryTvlTry,
+    wiTryTvlTry,
+    usdPerTry,
+    wiTryUsd,
+    iTryTvlUsd,
+    wiTryTvlUsd,
+    // Back-compat aliases for any external readers of the old key names.
+    navUsd: navTry,
+    wiTryUsdc: wiTryTry,
+    iTryTvlUsdc: iTryTvlTry,
+    wiTryTvlUsdc: wiTryTvlTry,
   };
 
   const outPath = resolve(WEB_DIR, "snapshots.json");
   writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log(`Wrote ${outPath}`);
   console.log(
-    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navUsd.at(-1)} | iTRY TVL=${iTryTvlUsdc.at(-1)} | wiTRY TVL=${wiTryTvlUsdc.at(-1)}`,
+    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)}`,
   );
 }
 
