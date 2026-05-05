@@ -2,8 +2,10 @@
 # One-shot bootstrap for brix.money chart server.
 #
 # Usage on a fresh Ubuntu/Debian host (e.g. Hetzner Cloud):
-#   curl -fsSL https://raw.githubusercontent.com/gokhanseckin/brix/claude/chart-witry-metrics-o2F8i/bootstrap.sh \
+#   curl -fsSL https://raw.githubusercontent.com/gokhanseckin/brix/main/bootstrap.sh \
 #     | ETHERSCAN_API_KEY=xxxxxxxx bash
+#
+# Override the branch with BRIX_BRANCH=foo if needed.
 #
 # What it does:
 #   1. Installs Node 20 + git if missing (via apt + NodeSource).
@@ -21,7 +23,7 @@ if [[ -z "${ETHERSCAN_API_KEY:-}" ]]; then
 fi
 
 REPO_URL="https://github.com/gokhanseckin/brix.git"
-BRANCH="claude/chart-witry-metrics-o2F8i"
+BRANCH="${BRIX_BRANCH:-main}"
 DEST="${HOME}/brix-charts"
 PORT="${PORT:-8080}"
 
