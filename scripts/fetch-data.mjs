@@ -724,9 +724,11 @@ async function main() {
   const iTrySupplyDaily = snapshots.map((s) => bigToFloat(s.itrySupply, itryDecimals));
   // wiTRY inherits the underlying's decimals (ERC-4626 standard).
   const witrySupplyDaily = snapshots.map((s) => bigToFloat(s.witrySupply, itryDecimals));
-  // brix.money's "unwrapped iTRY" = total iTRY supply − wiTRY share count.
+  // "Unwrapped iTRY" = iTRY in user wallets = total iTRY − iTRY held by vault.
+  // (Brix's homepage subtracts the share count instead, which inflates this
+  // number by the accrued yield. We use the strict on-chain ledger figure.)
   const unwrappedITryDaily = snapshots.map((s) =>
-    bigToFloat(s.itrySupply - s.witrySupply, itryDecimals),
+    bigToFloat(s.itrySupply - s.witryAssets, itryDecimals),
   );
   const wiTryPerITry = snapshots.map((s) =>
     s.witrySupply === 0n ? null : Number((s.witryAssets * 10n ** 18n) / s.witrySupply) / 1e18,
