@@ -407,8 +407,14 @@
           const d = Math.floor(h / 24);
           return `${d}d ${h % 24}h ago`;
         };
+        const offMin = -new Date().getTimezoneOffset();
+        const sign = offMin >= 0 ? "+" : "−";
+        const abs = Math.abs(offMin);
+        const h = Math.floor(abs / 60);
+        const m = abs % 60;
+        const tzLabel = `UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
         document.getElementById("last-updated").innerHTML =
-          `Last updated <b>${generated.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</b><br />` +
+          `Last updated <b>${generated.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</b> <span style="color:var(--muted)">(${tzLabel})</span><br />` +
           `<span title="Refreshed every 6 hours by GitHub Actions">${fmtAge(ageMs)} · auto-refresh every 6h</span>`;
 
         document.getElementById("meta").innerHTML = `
