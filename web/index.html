@@ -28,8 +28,12 @@
       header {
         padding: 24px 32px 8px;
       }
-      h1 {
-        font-size: 20px;
+      .page-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
         margin: 0 0 4px;
       }
       header p {
@@ -42,6 +46,46 @@
         padding: 2px 6px;
         border-radius: 4px;
         font-size: 12px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        padding: 8px 32px 16px;
+      }
+      .hero-stat {
+        background: var(--panel);
+        border: 1px solid #1f242c;
+        border-radius: 14px;
+        padding: 18px 22px 20px;
+      }
+      .hero-stat .label {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 8px;
+      }
+      .hero-stat h1 {
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .hero-stat .delta {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .hero-stat.try h1 {
+        color: var(--accent-3);
+      }
+      .hero-stat.usd h1 {
+        color: var(--accent-2);
+      }
+      .hero-stat h1.neg {
+        color: #fca5a5;
       }
       main {
         display: grid;
@@ -91,12 +135,25 @@
   </head>
   <body>
     <header>
-      <h1>brix.money — wiTRY / iTRY daily history</h1>
+      <p class="page-title">brix.money · wiTRY / iTRY daily history</p>
       <p>
         Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
         iTRY through NAV-driven supply expansion forwarded into the vault.
       </p>
     </header>
+
+    <section class="hero" id="hero" aria-label="Headline APY indicators">
+      <div class="hero-stat try">
+        <p class="label">APY 7d · TRY (vault yield)</p>
+        <h1 id="apy-try">—</h1>
+        <p class="delta">Annualised from the wiTRY share price in lira</p>
+      </div>
+      <div class="hero-stat usd">
+        <p class="label">APY 7d · USD (holder return)</p>
+        <h1 id="apy-usd">—</h1>
+        <p class="delta">Same window, priced through ECB TRY/USD</p>
+      </div>
+    </section>
 
     <div id="error"></div>
 
@@ -208,6 +265,14 @@
 
         const xs = data.days;
         const last = xs.length - 1;
+
+        function paintApy(id, v) {
+          const el = document.getElementById(id);
+          el.textContent = fmtPct(v);
+          el.classList.toggle("neg", typeof v === "number" && v < 0);
+        }
+        paintApy("apy-try", data.apy7d?.try);
+        paintApy("apy-usd", data.apy7d?.usd);
 
         document.getElementById("meta").innerHTML = `
           <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
