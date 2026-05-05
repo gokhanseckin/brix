@@ -817,6 +817,8 @@ async function main() {
   const yieldTryDaily = yieldITryDaily.map((v, i) => v * navTry[i]);
   let cumY = 0;
   const yieldITryCumulative = yieldITryDaily.map((v) => (cumY += v));
+  let cumYT = 0;
+  const yieldTryCumulative = yieldTryDaily.map((v) => (cumYT += v));
   const primaryITryDaily = snapshots.map(
     (s) => bigToFloat(primaryByDay.get(s.day) || 0n, itryDecimals),
   );
@@ -910,6 +912,7 @@ async function main() {
     yieldTry: yieldTryDaily,
     yieldUsd: yieldUsdDaily,
     yieldITryCumulative,
+    yieldTryCumulative,
     primaryITry: primaryITryDaily,
     primaryTry: primaryTryDaily,
     primaryUsd: primaryUsdDaily,

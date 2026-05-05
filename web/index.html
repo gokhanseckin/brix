@@ -74,7 +74,7 @@
         padding: 8px 32px 0;
       }
       .hero.row-apy {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);
         padding-top: 8px;
       }
       .hero.row-supply {
@@ -207,6 +207,11 @@
         <p class="label">APY 7d · TRY (vault yield)</p>
         <h1 id="apy-try">—</h1>
         <p class="delta">Annualised from the wiTRY share price in lira</p>
+      </div>
+      <div class="hero-stat try">
+        <p class="label">Yield since inception · TRY</p>
+        <h1><span id="yield-since-inception">—</span><span class="unit">TRY</span></h1>
+        <p class="delta">Total iTRY delivered to the vault as yield (× NAV)</p>
       </div>
       <div class="hero-stat usd">
         <p class="label">APY 7d · USD (holder return)</p>
@@ -395,6 +400,9 @@
         );
         document.getElementById("unwrapped-itry").textContent = fmtCount(
           (data.unwrappedITry || [])[last],
+        );
+        document.getElementById("yield-since-inception").textContent = fmtCount(
+          (data.yieldTryCumulative || data.yieldITryCumulative || [])[last],
         );
 
         const generated = new Date(data.generatedAt);
