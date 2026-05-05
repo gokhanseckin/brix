@@ -49,9 +49,26 @@
       }
       .hero {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 16px;
-        padding: 8px 32px 16px;
+        padding: 8px 32px 0;
+      }
+      .hero.row-apy {
+        grid-template-columns: repeat(2, 1fr);
+        padding-top: 8px;
+      }
+      .hero.row-supply {
+        grid-template-columns: repeat(4, 1fr);
+        padding-bottom: 16px;
+      }
+      @media (max-width: 1100px) {
+        .hero.row-supply {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+      }
+      @media (max-width: 720px) {
+        .hero.row-apy {
+          grid-template-columns: 1fr;
+        }
       }
       .hero-stat {
         background: var(--panel);
@@ -73,6 +90,9 @@
         font-weight: 600;
         font-variant-numeric: tabular-nums;
       }
+      .row-supply .hero-stat h1 {
+        font-size: 30px;
+      }
       .hero-stat .delta {
         margin-top: 6px;
         font-size: 12px;
@@ -89,6 +109,9 @@
       }
       .hero-stat.witry h1 {
         color: var(--accent-4);
+      }
+      .hero-stat.locked h1 {
+        color: #a78bfa;
       }
       .hero-stat.unwrapped h1 {
         color: var(--accent-1);
@@ -157,7 +180,7 @@
       </p>
     </header>
 
-    <section class="hero" id="hero" aria-label="Headline indicators">
+    <section class="hero row-apy" aria-label="Headline APY indicators">
       <div class="hero-stat try">
         <p class="label">APY 7d · TRY (vault yield)</p>
         <h1 id="apy-try">—</h1>
@@ -168,20 +191,28 @@
         <h1 id="apy-usd">—</h1>
         <p class="delta">Same window, priced through ECB TRY/USD</p>
       </div>
-      <div class="hero-stat itry">
-        <p class="label">iTRY supply</p>
-        <h1><span id="itry-supply">—</span><span class="unit">iTRY</span></h1>
-        <p class="delta">All iTRY tokens currently in circulation</p>
-      </div>
+    </section>
+
+    <section class="hero row-supply" aria-label="Supply breakdown">
       <div class="hero-stat witry">
         <p class="label">wiTRY supply</p>
         <h1><span id="witry-supply">—</span><span class="unit">wiTRY</span></h1>
         <p class="delta">Shares outstanding in the staking vault</p>
       </div>
+      <div class="hero-stat itry">
+        <p class="label">iTRY supply</p>
+        <h1><span id="itry-supply">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">All iTRY tokens currently in circulation</p>
+      </div>
+      <div class="hero-stat locked">
+        <p class="label">iTRY locked</p>
+        <h1><span id="itry-locked">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">iTRY currently held inside the wiTRY vault</p>
+      </div>
       <div class="hero-stat unwrapped">
         <p class="label">Unwrapped iTRY</p>
         <h1><span id="unwrapped-itry">—</span><span class="unit">iTRY</span></h1>
-        <p class="delta">Total iTRY supply − wiTRY share count</p>
+        <p class="delta">iTRY tokens sitting in user wallets</p>
       </div>
     </section>
 
@@ -312,6 +343,9 @@
         );
         document.getElementById("witry-supply").textContent = fmtCount(
           (data.witrySupply || [])[last],
+        );
+        document.getElementById("itry-locked").textContent = fmtCount(
+          (data.iTryLocked || [])[last],
         );
         document.getElementById("unwrapped-itry").textContent = fmtCount(
           (data.unwrappedITry || [])[last],

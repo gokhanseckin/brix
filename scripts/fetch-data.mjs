@@ -724,6 +724,8 @@ async function main() {
   const iTrySupplyDaily = snapshots.map((s) => bigToFloat(s.itrySupply, itryDecimals));
   // wiTRY inherits the underlying's decimals (ERC-4626 standard).
   const witrySupplyDaily = snapshots.map((s) => bigToFloat(s.witrySupply, itryDecimals));
+  // iTRY currently held by the wiTRY vault contract (= iTRY locked).
+  const iTryLockedDaily = snapshots.map((s) => bigToFloat(s.witryAssets, itryDecimals));
   // "Unwrapped iTRY" = iTRY in user wallets = total iTRY − iTRY held by vault.
   // (Brix's homepage subtracts the share count instead, which inflates this
   // number by the accrued yield. We use the strict on-chain ledger figure.)
@@ -809,6 +811,7 @@ async function main() {
     days,
     iTrySupply: iTrySupplyDaily,
     witrySupply: witrySupplyDaily,
+    iTryLocked: iTryLockedDaily,
     unwrappedITry: unwrappedITryDaily,
     wiTryPerITry,
     navTry,
