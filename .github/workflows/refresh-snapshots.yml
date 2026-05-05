@@ -1,0 +1,51 @@
+name: refresh-snapshots
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-snapshots
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore data cache
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: brix-data-${{ hashFiles('scripts/fetch-data.mjs') }}-${{ github.run_id }}
+          restore-keys: |
+            brix-data-${{ hashFiles('scripts/fetch-data.mjs') }}-
+            brix-data-
+
+      - name: Fetch on-chain snapshots
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: node scripts/fetch-data.mjs
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/snapshots.json
+          if git diff --cached --quiet; then
+            echo "No snapshot changes."
+          else
+            git commit -m "chore: refresh snapshots ($(date -u +%Y-%m-%d))"
+            git push
+          fi

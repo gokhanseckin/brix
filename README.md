@@ -208,3 +208,27 @@ dashboard. The other addresses are listed for reference.
 | `CHART_START_DATE` | `2026-03-23` | First day on the X axis (`YYYY-MM-DD`) |
 | `TRY_USD` | — | If set, use this flat TRY/USD rate instead of fetching daily ECB rates (useful for offline runs) |
 | `NAV_DECIMALS` | discovered, falls back to 18 | Override for the NAV feed's decimal precision |
+
+## Deploy
+
+The dashboard is a static site under `web/`, deployed on Vercel and
+auto-refreshed daily by GitHub Actions.
+
+1. **GitHub side** — add a repo secret `ETHERSCAN_API_KEY` at
+   `Settings → Secrets and variables → Actions`. The workflow at
+   `.github/workflows/refresh-snapshots.yml` runs every day at 06:00 UTC
+   (after the ECB FX publication), regenerates `web/snapshots.json`, and
+   commits it back to `main`. Block/log caches under `data/` are persisted
+   between runs via `actions/cache`, so reruns are incremental and finish
+   in seconds.
+
+2. **Vercel side** — import the repo at https://vercel.com/new. Vercel
+   reads `vercel.json` (`outputDirectory: web`, no build step) and serves
+   `web/` as a static site. No environment variables are needed on Vercel:
+   the data is committed by the Action, and each push to `main` triggers
+   an automatic redeploy. `snapshots.json` is served with a short edge TTL
+   (`s-maxage=300, stale-while-revalidate=86400`) and `index.html` with
+   `no-cache` so the new data appears immediately after each refresh.
+
+`ETHERSCAN_API_KEY` only needs to live as a GitHub repo secret. Vercel
+never fetches on-chain data directly.
