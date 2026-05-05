@@ -627,8 +627,32 @@ async function main() {
     `  iTRY transfers=${itryTransfers.length}, wiTRY transfers=${witryTransfers.length}, NAV updates=${navUpdates.length}`,
   );
 
-  console.log("Replaying events into daily snapshots...");
+  console.log("Classifying iTRY → wiTRY inflows (deposit vs yield)...");
   const witryAddrLower = WITRY.toLowerCase();
+  // A transfer of iTRY into the wiTRY vault is "yield" iff no wiTRY shares
+  // are minted in the same transaction. Deposits mint shares proportionally;
+  // pure yield drops bump totalAssets without touching totalSupply, which is
+  // exactly what raises share price. This invariant is robust against
+  // changes in the protocol's yield-routing internals.
+  const witryMintTxHashes = new Set();
+  for (const l of witryTransfers) {
+    const from = "0x" + l.topics[1].slice(26);
+    if (from === ZERO) witryMintTxHashes.add(l.transactionHash);
+  }
+  const yieldByDay = new Map(); // dayIdx -> BigInt iTRY-wei delivered
+  for (const l of itryTransfers) {
+    const to = ("0x" + l.topics[2].slice(26)).toLowerCase();
+    if (to !== witryAddrLower) continue;
+    if (witryMintTxHashes.has(l.transactionHash)) continue; // deposit
+    const day = dayOf(parseInt(l.timeStamp, 16));
+    const amt = BigInt(l.data);
+    yieldByDay.set(day, (yieldByDay.get(day) || 0n) + amt);
+  }
+  console.log(
+    `  classified ${yieldByDay.size} day(s) with yield deliveries`,
+  );
+
+  console.log("Replaying events into daily snapshots...");
 
   function fromLog(kind, log) {
     return {
@@ -763,6 +787,16 @@ async function main() {
   const wiTryTvlTry = snapshots.map((s, i) =>
     bigToFloat(s.witryAssets, itryDecimals) * navTry[i],
   );
+  // Daily yield delivered to the wiTRY vault, in iTRY (and TRY via NAV).
+  // A "yield event" is an iTRY → wiTRY transfer in a tx that did not mint
+  // wiTRY shares (i.e. wasn't a deposit). Cumulative series is the running
+  // total across the chart window.
+  const yieldITryDaily = snapshots.map(
+    (s) => bigToFloat(yieldByDay.get(s.day) || 0n, itryDecimals),
+  );
+  const yieldTryDaily = yieldITryDaily.map((v, i) => v * navTry[i]);
+  let cum = 0;
+  const yieldITryCumulative = yieldITryDaily.map((v) => (cum += v));
 
   console.log("Fetching TRY/USD daily rates from Frankfurter (ECB)...");
   const fx = await fetchTryUsdRates(days[0], days[days.length - 1]);
@@ -796,6 +830,9 @@ async function main() {
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
   const wiTryTvlUsd = wiTryTvlTry.map((v, i) =>
+    usdPerTry[i] == null ? null : v * usdPerTry[i],
+  );
+  const yieldUsdDaily = yieldTryDaily.map((v, i) =>
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
 
@@ -840,6 +877,10 @@ async function main() {
     wiTryUsd,
     iTryTvlUsd,
     wiTryTvlUsd,
+    yieldITry: yieldITryDaily,
+    yieldTry: yieldTryDaily,
+    yieldUsd: yieldUsdDaily,
+    yieldITryCumulative,
     // Back-compat aliases for any external readers of the old key names.
     navUsd: navTry,
     wiTryUsdc: wiTryTry,
