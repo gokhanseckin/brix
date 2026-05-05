@@ -27,6 +27,27 @@
       }
       header {
         padding: 24px 32px 8px;
+        position: relative;
+      }
+      .last-updated {
+        position: absolute;
+        top: 24px;
+        right: 32px;
+        font-size: 12px;
+        color: var(--muted);
+        text-align: right;
+        line-height: 1.4;
+      }
+      .last-updated b {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      @media (max-width: 720px) {
+        .last-updated {
+          position: static;
+          margin-top: 8px;
+          text-align: left;
+        }
       }
       .page-title {
         font-size: 13px;
@@ -178,6 +199,7 @@
         Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
         iTRY through NAV-driven supply expansion forwarded into the vault.
       </p>
+      <div class="last-updated" id="last-updated" title="Refreshed every 6 hours by GitHub Actions">—</div>
     </header>
 
     <section class="hero row-apy" aria-label="Headline APY indicators">
@@ -374,6 +396,20 @@
         document.getElementById("unwrapped-itry").textContent = fmtCount(
           (data.unwrappedITry || [])[last],
         );
+
+        const generated = new Date(data.generatedAt);
+        const ageMs = Date.now() - generated.getTime();
+        const fmtAge = (ms) => {
+          const m = Math.floor(ms / 60000);
+          if (m < 60) return `${m}m ago`;
+          const h = Math.floor(m / 60);
+          if (h < 24) return `${h}h ${m % 60}m ago`;
+          const d = Math.floor(h / 24);
+          return `${d}d ${h % 24}h ago`;
+        };
+        document.getElementById("last-updated").innerHTML =
+          `Last updated <b>${generated.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</b><br />` +
+          `<span title="Refreshed every 6 hours by GitHub Actions">${fmtAge(ageMs)} · auto-refresh every 6h</span>`;
 
         document.getElementById("meta").innerHTML = `
           <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
