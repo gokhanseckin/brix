@@ -250,6 +250,18 @@
       </section>
 
       <section class="card">
+        <h2>Primary iTRY issuance</h2>
+        <p class="sub">
+          Fresh iTRY minted in transactions that did <em>not</em> route into
+          the wiTRY vault — i.e. issuance to user wallets and operators
+          rather than vault yield. Bars show daily issuance (left axis),
+          line shows cumulative iTRY issued since the chart start
+          (right axis).
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-primary"></canvas></div>
+      </section>
+
+      <section class="card">
         <h2>Yield delivered to wiTRY vault</h2>
         <p class="sub">
           On-chain proof of yield: any iTRY transferred into the vault in a
@@ -485,6 +497,69 @@
                         : `$${v}`,
                 },
                 grid: { color: "rgba(255,255,255,0.04)" },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-primary").getContext("2d"), {
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                type: "bar",
+                label: "Primary iTRY issuance (per day)",
+                data: data.primaryITry || [],
+                backgroundColor: "rgba(74,222,128,0.7)",
+                borderColor: "#4ade80",
+                borderWidth: 1,
+                yAxisID: "y",
+              },
+              {
+                type: "line",
+                label: "Cumulative iTRY issued",
+                data: data.primaryITryCumulative || [],
+                borderColor: "#22d3ee",
+                backgroundColor: "rgba(34,211,238,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: false,
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                position: "left",
+                title: { display: true, text: "iTRY / day", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(1)}K`
+                        : `${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+              y1: {
+                position: "right",
+                title: { display: true, text: "Cumulative iTRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(0)}K`
+                        : `${v}`,
+                },
+                grid: { drawOnChartArea: false },
               },
             },
           },

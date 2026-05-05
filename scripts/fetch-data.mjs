@@ -639,6 +639,13 @@ async function main() {
     const from = "0x" + l.topics[1].slice(26);
     if (from === ZERO) witryMintTxHashes.add(l.transactionHash);
   }
+  // Pre-compute "this tx delivered iTRY into wiTRY" — used to split iTRY
+  // mints into yield (lands in vault same-tx) vs primary issuance (does not).
+  const txsDeliveringToVault = new Set();
+  for (const l of itryTransfers) {
+    const to = ("0x" + l.topics[2].slice(26)).toLowerCase();
+    if (to === witryAddrLower) txsDeliveringToVault.add(l.transactionHash);
+  }
   const yieldByDay = new Map(); // dayIdx -> BigInt iTRY-wei delivered
   for (const l of itryTransfers) {
     const to = ("0x" + l.topics[2].slice(26)).toLowerCase();
@@ -648,8 +655,21 @@ async function main() {
     const amt = BigInt(l.data);
     yieldByDay.set(day, (yieldByDay.get(day) || 0n) + amt);
   }
+  // Primary issuance = iTRY mint whose tx did NOT route into the vault.
+  // Yield-related mints route through the Yield Forwarder → ... → wiTRY all
+  // in the same transaction, so the same-tx-vault-delivery check separates
+  // them cleanly without caring about which intermediary contracts are used.
+  const primaryByDay = new Map();
+  for (const l of itryTransfers) {
+    const from = "0x" + l.topics[1].slice(26);
+    if (from !== ZERO) continue;
+    if (txsDeliveringToVault.has(l.transactionHash)) continue; // yield mint
+    const day = dayOf(parseInt(l.timeStamp, 16));
+    const amt = BigInt(l.data);
+    primaryByDay.set(day, (primaryByDay.get(day) || 0n) + amt);
+  }
   console.log(
-    `  classified ${yieldByDay.size} day(s) with yield deliveries`,
+    `  classified ${yieldByDay.size} yield day(s), ${primaryByDay.size} primary-issuance day(s)`,
   );
 
   console.log("Replaying events into daily snapshots...");
@@ -795,8 +815,14 @@ async function main() {
     (s) => bigToFloat(yieldByDay.get(s.day) || 0n, itryDecimals),
   );
   const yieldTryDaily = yieldITryDaily.map((v, i) => v * navTry[i]);
-  let cum = 0;
-  const yieldITryCumulative = yieldITryDaily.map((v) => (cum += v));
+  let cumY = 0;
+  const yieldITryCumulative = yieldITryDaily.map((v) => (cumY += v));
+  const primaryITryDaily = snapshots.map(
+    (s) => bigToFloat(primaryByDay.get(s.day) || 0n, itryDecimals),
+  );
+  const primaryTryDaily = primaryITryDaily.map((v, i) => v * navTry[i]);
+  let cumP = 0;
+  const primaryITryCumulative = primaryITryDaily.map((v) => (cumP += v));
 
   console.log("Fetching TRY/USD daily rates from Frankfurter (ECB)...");
   const fx = await fetchTryUsdRates(days[0], days[days.length - 1]);
@@ -833,6 +859,9 @@ async function main() {
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
   const yieldUsdDaily = yieldTryDaily.map((v, i) =>
+    usdPerTry[i] == null ? null : v * usdPerTry[i],
+  );
+  const primaryUsdDaily = primaryTryDaily.map((v, i) =>
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
 
@@ -881,6 +910,10 @@ async function main() {
     yieldTry: yieldTryDaily,
     yieldUsd: yieldUsdDaily,
     yieldITryCumulative,
+    primaryITry: primaryITryDaily,
+    primaryTry: primaryTryDaily,
+    primaryUsd: primaryUsdDaily,
+    primaryITryCumulative,
     // Back-compat aliases for any external readers of the old key names.
     navUsd: navTry,
     wiTryUsdc: wiTryTry,
