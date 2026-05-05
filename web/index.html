@@ -84,6 +84,9 @@
       .hero-stat.usd h1 {
         color: var(--accent-2);
       }
+      .hero-stat.itry h1 {
+        color: #22d3ee;
+      }
       .hero-stat.witry h1 {
         color: var(--accent-4);
       }
@@ -164,6 +167,11 @@
         <p class="label">APY 7d · USD (holder return)</p>
         <h1 id="apy-usd">—</h1>
         <p class="delta">Same window, priced through ECB TRY/USD</p>
+      </div>
+      <div class="hero-stat itry">
+        <p class="label">iTRY supply</p>
+        <h1><span id="itry-supply">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">All iTRY tokens currently in circulation</p>
       </div>
       <div class="hero-stat witry">
         <p class="label">wiTRY supply</p>
@@ -299,6 +307,9 @@
           v == null
             ? "—"
             : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
+        document.getElementById("itry-supply").textContent = fmtCount(
+          (data.iTrySupply || [])[last],
+        );
         document.getElementById("witry-supply").textContent = fmtCount(
           (data.witrySupply || [])[last],
         );
