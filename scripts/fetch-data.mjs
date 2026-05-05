@@ -721,6 +721,13 @@ async function main() {
 
   console.log("Deriving series...");
   const days = snapshots.map((s) => isoDay(s.day));
+  const iTrySupplyDaily = snapshots.map((s) => bigToFloat(s.itrySupply, itryDecimals));
+  // wiTRY inherits the underlying's decimals (ERC-4626 standard).
+  const witrySupplyDaily = snapshots.map((s) => bigToFloat(s.witrySupply, itryDecimals));
+  // brix.money's "unwrapped iTRY" = total iTRY supply − wiTRY share count.
+  const unwrappedITryDaily = snapshots.map((s) =>
+    bigToFloat(s.itrySupply - s.witrySupply, itryDecimals),
+  );
   const wiTryPerITry = snapshots.map((s) =>
     s.witrySupply === 0n ? null : Number((s.witryAssets * 10n ** 18n) / s.witrySupply) / 1e18,
   );
@@ -798,6 +805,9 @@ async function main() {
     fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
     apy7d,
     days,
+    iTrySupply: iTrySupplyDaily,
+    witrySupply: witrySupplyDaily,
+    unwrappedITry: unwrappedITryDaily,
     wiTryPerITry,
     navTry,
     wiTryTry,

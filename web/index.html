@@ -84,8 +84,20 @@
       .hero-stat.usd h1 {
         color: var(--accent-2);
       }
+      .hero-stat.witry h1 {
+        color: var(--accent-4);
+      }
+      .hero-stat.unwrapped h1 {
+        color: var(--accent-1);
+      }
       .hero-stat h1.neg {
         color: #fca5a5;
+      }
+      .hero-stat .unit {
+        color: var(--muted);
+        font-size: 18px;
+        font-weight: 500;
+        margin-left: 6px;
       }
       main {
         display: grid;
@@ -142,7 +154,7 @@
       </p>
     </header>
 
-    <section class="hero" id="hero" aria-label="Headline APY indicators">
+    <section class="hero" id="hero" aria-label="Headline indicators">
       <div class="hero-stat try">
         <p class="label">APY 7d · TRY (vault yield)</p>
         <h1 id="apy-try">—</h1>
@@ -152,6 +164,16 @@
         <p class="label">APY 7d · USD (holder return)</p>
         <h1 id="apy-usd">—</h1>
         <p class="delta">Same window, priced through ECB TRY/USD</p>
+      </div>
+      <div class="hero-stat witry">
+        <p class="label">wiTRY supply</p>
+        <h1><span id="witry-supply">—</span><span class="unit">wiTRY</span></h1>
+        <p class="delta">Shares outstanding in the staking vault</p>
+      </div>
+      <div class="hero-stat unwrapped">
+        <p class="label">Unwrapped iTRY</p>
+        <h1><span id="unwrapped-itry">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">Total iTRY supply − wiTRY share count</p>
       </div>
     </section>
 
@@ -170,23 +192,22 @@
       </section>
 
       <section class="card">
-        <h2>TVL over time (USD)</h2>
+        <h2>TVL over time (TRY)</h2>
         <p class="sub">
-          USD = supply × NAV × ECB TRY/USD daily rate. iTRY TVL is the entire
-          circulating iTRY priced at NAV; wiTRY TVL is just the iTRY held
-          inside the vault.
+          TRY = supply × NAV. Reflects protocol-level growth independent of
+          FX moves. iTRY TVL is the entire circulating iTRY priced at NAV;
+          wiTRY TVL is just the iTRY held inside the vault.
         </p>
-        <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chart-tvl-try"></canvas></div>
       </section>
 
       <section class="card">
-        <h2>TVL over time (TRY)</h2>
+        <h2>TVL over time (USD)</h2>
         <p class="sub">
-          TRY = supply × NAV. Same series as the USD chart above, but priced
-          in lira instead of dollars — useful for spotting protocol-level
-          growth independent of FX moves.
+          USD = supply × NAV × ECB TRY/USD daily rate. Same series as the
+          TRY chart above, repriced in dollars.
         </p>
-        <div class="canvas-wrap"><canvas id="chart-tvl-try"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
       </section>
     </main>
 
@@ -273,6 +294,17 @@
         }
         paintApy("apy-try", data.apy7d?.try);
         paintApy("apy-usd", data.apy7d?.usd);
+
+        const fmtCount = (v) =>
+          v == null
+            ? "—"
+            : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
+        document.getElementById("witry-supply").textContent = fmtCount(
+          (data.witrySupply || [])[last],
+        );
+        document.getElementById("unwrapped-itry").textContent = fmtCount(
+          (data.unwrappedITry || [])[last],
+        );
 
         document.getElementById("meta").innerHTML = `
           <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
