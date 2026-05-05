@@ -717,9 +717,12 @@ async function main() {
     }
   }
 
-  // Trim leading days before the first iTRY was minted, so the chart starts
-  // at the protocol's actual launch instead of the NAV-feed deploy block.
-  const firstActive = snapshots.findIndex((s) => s.itrySupply > 0n);
+  // Trim leading days before the first meaningful iTRY mint, so the chart
+  // starts at the protocol's actual launch instead of the NAV-feed deploy
+  // block. Threshold is 1 whole iTRY (10^decimals wei) to ignore single-wei
+  // initialization mints.
+  const launchThreshold = 10n ** BigInt(itryDecimals);
+  const firstActive = snapshots.findIndex((s) => s.itrySupply > launchThreshold);
   if (firstActive > 0) {
     snapshots.splice(0, firstActive);
     console.log(`  trimmed ${firstActive} pre-launch day(s)`);
