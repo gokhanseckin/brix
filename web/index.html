@@ -160,6 +160,14 @@
               currency: "USD",
               maximumFractionDigits: v < 1 ? 4 : 0,
             }).format(v);
+      const fmtPct = (v) =>
+        v == null || !Number.isFinite(v)
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "percent",
+              maximumFractionDigits: 2,
+              signDisplay: "exceptZero",
+            }).format(v);
       const fmtNum = (v) =>
         v == null
           ? "—"
@@ -208,6 +216,8 @@
           <span>Latest NAV <b>${fmtTry((data.navTry || data.navUsd)[last])} per iTRY</b></span>
           <span>TRY/USD <b>${fmtNum((data.usdPerTry || [])[last])}</b> <span style="color:var(--muted)">(${data.fxSource || "—"})</span></span>
           <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
+          <span>APY 7d (TRY) <b>${fmtPct(data.apy7d?.try)}</b></span>
+          <span>APY 7d (USD) <b>${fmtPct(data.apy7d?.usd)}</b></span>
           <span>iTRY TVL <b>${fmtUsd((data.iTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.iTryTvlTry || data.iTryTvlUsdc)[last])})</span></span>
           <span>wiTRY TVL <b>${fmtUsd((data.wiTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.wiTryTvlTry || data.wiTryTvlUsdc)[last])})</span></span>
         `;

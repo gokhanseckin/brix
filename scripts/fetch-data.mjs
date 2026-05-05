@@ -770,6 +770,24 @@ async function main() {
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
 
+  // Trailing N-day APY from the share-price ratio over the window:
+  //   APY = (price_now / price_window) ^ (365 / N) - 1
+  // Standard practice for ERC-4626 vaults; uses share price (totalAssets per
+  // share) so it captures intrinsic yield, plus FX in the USD case.
+  function trailingApy(values, window) {
+    if (values.length <= window) return null;
+    const end = values[values.length - 1];
+    const start = values[values.length - 1 - window];
+    if (end == null || start == null || start <= 0 || end <= 0) return null;
+    const ratio = end / start;
+    if (!Number.isFinite(ratio) || ratio <= 0) return null;
+    return Math.pow(ratio, 365 / window) - 1;
+  }
+  const apy7d = {
+    try: trailingApy(wiTryTry, 7),
+    usd: trailingApy(wiTryUsd, 7),
+  };
+
   const out = {
     generatedAt: new Date().toISOString(),
     chain: "ethereum",
@@ -778,6 +796,7 @@ async function main() {
     navMethod: { kind: navMethod.kind, signature: navMethod.signature },
     navEvent: navMethod.signature,
     fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
+    apy7d,
     days,
     wiTryPerITry,
     navTry,
@@ -798,8 +817,9 @@ async function main() {
   const outPath = resolve(WEB_DIR, "snapshots.json");
   writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log(`Wrote ${outPath}`);
+  const pct = (v) => (v == null ? "—" : (v * 100).toFixed(2) + "%");
   console.log(
-    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)}`,
+    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)} | APY 7d TRY=${pct(apy7d.try)} USD=${pct(apy7d.usd)}`,
   );
 }
 
