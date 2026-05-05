@@ -480,9 +480,23 @@
                 title: { display: true, text: "USD per wiTRY", color: "#8b93a1" },
                 ticks: {
                   color: "#8b93a1",
-                  callback: (v) => "$" + Number(v).toFixed(v < 1 ? 4 : 2),
+                  callback: (v) => "$" + Number(v).toFixed(v < 1 ? 6 : 2),
                 },
                 grid: { drawOnChartArea: false },
+              },
+            },
+            plugins: {
+              ...baseOptions.plugins,
+              tooltip: {
+                ...baseOptions.plugins.tooltip,
+                callbacks: {
+                  label: (ctx) => {
+                    const v = ctx.parsed.y;
+                    if (ctx.dataset.yAxisID === "yUSD")
+                      return `${ctx.dataset.label}: $${Number(v).toFixed(6)}`;
+                    return `${ctx.dataset.label}: ${Number(v).toFixed(6)}`;
+                  },
+                },
               },
             },
           },
