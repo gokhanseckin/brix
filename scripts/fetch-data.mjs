@@ -717,6 +717,14 @@ async function main() {
     }
   }
 
+  // Trim leading days before the first iTRY was minted, so the chart starts
+  // at the protocol's actual launch instead of the NAV-feed deploy block.
+  const firstActive = snapshots.findIndex((s) => s.itrySupply > 0n);
+  if (firstActive > 0) {
+    snapshots.splice(0, firstActive);
+    console.log(`  trimmed ${firstActive} pre-launch day(s)`);
+  }
+
   console.log(`  produced ${snapshots.length} daily snapshots`);
 
   console.log("Deriving series...");

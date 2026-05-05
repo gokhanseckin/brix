@@ -231,20 +231,20 @@
       </section>
 
       <section class="card">
-        <h2>TVL over time (TRY)</h2>
+        <h2>iTRY supply & TVL over time (TRY)</h2>
         <p class="sub">
-          TRY = supply × NAV. Reflects protocol-level growth independent of
-          FX moves. iTRY TVL is the entire circulating iTRY priced at NAV;
-          wiTRY TVL is just the iTRY held inside the vault.
+          iTRY supply = all minted iTRY × NAV. iTRY TVL = iTRY currently
+          locked inside the wiTRY vault. Lira pricing reflects protocol
+          growth independent of FX moves.
         </p>
         <div class="canvas-wrap"><canvas id="chart-tvl-try"></canvas></div>
       </section>
 
       <section class="card">
-        <h2>TVL over time (USD)</h2>
+        <h2>iTRY supply & TVL over time (USD)</h2>
         <p class="sub">
-          USD = supply × NAV × ECB TRY/USD daily rate. Same series as the
-          TRY chart above, repriced in dollars.
+          Same series as the TRY chart above, repriced through the ECB daily
+          TRY/USD reference rate.
         </p>
         <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
       </section>
@@ -360,8 +360,8 @@
           <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
           <span>APY 7d (TRY) <b>${fmtPct(data.apy7d?.try)}</b></span>
           <span>APY 7d (USD) <b>${fmtPct(data.apy7d?.usd)}</b></span>
-          <span>iTRY TVL <b>${fmtUsd((data.iTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.iTryTvlTry || data.iTryTvlUsdc)[last])})</span></span>
-          <span>wiTRY TVL <b>${fmtUsd((data.wiTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.wiTryTvlTry || data.wiTryTvlUsdc)[last])})</span></span>
+          <span>iTRY supply value <b>${fmtUsd((data.iTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.iTryTvlTry || data.iTryTvlUsdc)[last])})</span></span>
+          <span>iTRY TVL <b>${fmtUsd((data.wiTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.wiTryTvlTry || data.wiTryTvlUsdc)[last])})</span></span>
         `;
 
         new Chart(document.getElementById("chart-share").getContext("2d"), {
@@ -425,7 +425,7 @@
             labels: xs,
             datasets: [
               {
-                label: "iTRY TVL (USD)",
+                label: "iTRY Supply (USD)",
                 data: data.iTryTvlUsd || data.iTryTvlUsdc,
                 borderColor: "#34d399",
                 backgroundColor: "rgba(52,211,153,0.1)",
@@ -435,7 +435,7 @@
                 fill: true,
               },
               {
-                label: "wiTRY TVL (USD)",
+                label: "iTRY TVL (USD)",
                 data: data.wiTryTvlUsd || data.wiTryTvlUsdc,
                 borderColor: "#f472b6",
                 backgroundColor: "rgba(244,114,182,0.15)",
@@ -484,7 +484,7 @@
             labels: xs,
             datasets: [
               {
-                label: "iTRY TVL (TRY)",
+                label: "iTRY Supply (TRY)",
                 data: data.iTryTvlTry || data.iTryTvlUsdc,
                 borderColor: "#34d399",
                 backgroundColor: "rgba(52,211,153,0.1)",
@@ -494,7 +494,7 @@
                 fill: true,
               },
               {
-                label: "wiTRY TVL (TRY)",
+                label: "iTRY TVL (TRY)",
                 data: data.wiTryTvlTry || data.wiTryTvlUsdc,
                 borderColor: "#f472b6",
                 backgroundColor: "rgba(244,114,182,0.15)",
