@@ -867,18 +867,20 @@ async function main() {
     usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
 
-  // Trailing N-day APY from the share-price ratio over the window:
-  //   APY = (price_now / price_window) ^ (365 / N) - 1
-  // Standard practice for ERC-4626 vaults; uses share price (totalAssets per
-  // share) so it captures intrinsic yield, plus FX in the USD case.
+  // Trailing N-day APY using SIMPLE (linear) annualization:
+  //   APY = (price_now / price_window − 1) × (365 / N)
+  // Brix is a passthrough yield wrapper: Turkish T-bill coupons are minted
+  // into the vault but not reinvested into more bonds, so the underlying
+  // yield rate doesn't compound. Linear annualization matches that economic
+  // reality and aligns with brix.money's own published APY.
   function trailingApy(values, window) {
     if (values.length <= window) return null;
     const end = values[values.length - 1];
     const start = values[values.length - 1 - window];
     if (end == null || start == null || start <= 0 || end <= 0) return null;
-    const ratio = end / start;
-    if (!Number.isFinite(ratio) || ratio <= 0) return null;
-    return Math.pow(ratio, 365 / window) - 1;
+    const ret = end / start - 1;
+    if (!Number.isFinite(ret)) return null;
+    return ret * (365 / window);
   }
   const apy7d = {
     try: trailingApy(wiTryTry, 7),
