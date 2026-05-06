@@ -286,14 +286,13 @@
           those 7 days — an upper-bound view when coupons are lumpy.
         </p>
       </div>
-      <div class="hero-stat try">
-        <p class="label">APY 7d · TRY (smoothed, K=<span id="apy-smooth-k">30</span>d)</p>
-        <h1 id="apy-try-smoothed">—</h1>
+      <div class="hero-stat usd">
+        <p class="label">APY 7d · USD (flow)</p>
+        <h1 id="apy-usd-flow">—</h1>
         <p class="delta">
-          Spreads each yield drop linearly over the prior K days before
-          annualising — approximates the underlying T-bill rate when coupons
-          land in arrears. Set <code>APY_SMOOTHING_DAYS</code> in fetch env
-          to change K.
+          Same flow methodology as the TRY card, but the yield amounts and
+          vault denominator are priced through the ECB TRY/USD rate — so it
+          also absorbs the lira's FX move over the window.
         </p>
       </div>
       <div class="hero-stat try">
@@ -472,7 +471,7 @@
         paintApy("apy-try", data.apy7d?.try);
         paintApy("apy-usd", data.apy7d?.usd);
         paintApy("apy-try-flow", data.apy7dFlow?.try);
-        paintApy("apy-try-smoothed", data.apy7dSmoothed?.try);
+        paintApy("apy-usd-flow", data.apy7dFlow?.usd);
         const flowVal = data.apy7dFlow?.try;
         const baseVal = data.apy7d?.try;
         const delta =
@@ -480,10 +479,6 @@
             ? flowVal - baseVal
             : null;
         paintApy("apy-try-delta", delta);
-        if (typeof data.apy7dSmoothed?.windowDays === "number") {
-          document.getElementById("apy-smooth-k").textContent =
-            data.apy7dSmoothed.windowDays;
-        }
 
         const fmtCount = (v) =>
           v == null
