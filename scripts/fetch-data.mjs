@@ -24,6 +24,44 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 const TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
+// ---------- RedStone TRY/USD on-chain feed (MegaETH) ---------------------
+//
+// MegaEthReferenceMultiFeedAdapterWithoutRoundsV1 (proxy at REDSTONE_FEED)
+// emits ValueUpdate(uint256 value, bytes32 dataFeedId, uint256 updatedAt)
+// for several assets including TRY. All event params are NON-indexed, so
+// we cannot pre-filter by feedId via topics — fetch all ValueUpdate logs
+// for the contract and decode in JS. We hit Etherscan v2's multichain
+// endpoint (it supports chain 4326 = MegaETH on the existing API key)
+// instead of public Blockscout, which rate-limits aggressive paging.
+const REDSTONE_CHAIN_ID = 4326;
+const REDSTONE_FEED = "0x57677Bdc4F24D5c08ddCE87E06670C26a00Cac0b";
+// Dedicated TRY price-feed proxy on MegaETH — implements the Chainlink
+// AggregatorV3Interface (`latestAnswer`, `latestRoundData`, `decimals`).
+// It has no events / update txs of its own; reads delegate into the
+// multi-feed adapter at REDSTONE_FEED. Useful for (a) the live "now"
+// spot rate (one cheap `eth_call`) and (b) canonical attribution in the
+// UI. Description is "RedStone Price Feed for TRY".
+const REDSTONE_TRY_AGGREGATOR = "0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F";
+// keccak256("ValueUpdate(uint256,bytes32,uint256)")
+const VALUE_UPDATE_TOPIC =
+  "0xf36866d965ee70c8632ff558f5cf8d41ee9ca1d0d0bc7700786e57be60747390";
+const TRY_FEED_ID =
+  "0x5452590000000000000000000000000000000000000000000000000000000000";
+const REDSTONE_DECIMALS = 8;
+// Multi-feed adapter creation block on MegaETH is 2,732,522. The TRY data
+// feed itself only became active in the adapter recently (around block
+// ~15,100,000, ≈ 2026-04-30) — earlier blocks emit many ValueUpdate logs
+// for other feeds (BNB/BTC/ETH/SOL/USDC/USDT/MEGA/etc.) but no TRY rows,
+// so paging the full multi-million-event history just to find a few
+// hundred TRY events is wasteful. We start ingestion at the first block
+// where TRY appears in this adapter. Older days on the chart fall back
+// to the ECB rate already in `data.usdPerTry`. Override with
+// REDSTONE_FROM_BLOCK if you need older history.
+const REDSTONE_FEED_START_BLOCK = parseInt(
+  process.env.REDSTONE_FROM_BLOCK || "15100000",
+  10,
+);
+
 // ---------- .env loader (no dotenv dependency) ---------------------------
 
 function loadEnv() {
@@ -313,6 +351,137 @@ async function getAllLogs(label, address, topics, startBlock) {
   });
   writeFileSync(cachePath, JSON.stringify(cached));
   return cached.logs;
+}
+
+
+// ---------- RedStone TRY logs via Etherscan v2 (chain 4326) ----------
+//
+// Etherscan v2 is multichain — passing chainid=4326 routes the same key
+// at the MegaETH explorer. Reuses the existing `etherscan(...)` helper
+// (rate limit, retries, cache file format) and the `getLogsPage` paging
+// pattern, just with chainid overridden in the params.
+
+function decodeValueUpdate(data) {
+  const d = data.startsWith("0x") ? data.slice(2) : data;
+  if (d.length < 192) return null;
+  const value = BigInt("0x" + d.slice(0, 64));
+  const dataFeedId = "0x" + d.slice(64, 128);
+  const updatedAt = parseInt(d.slice(128, 192), 16);
+  return { value, dataFeedId, updatedAt };
+}
+
+// Page through ValueUpdate logs from the RedStone multi-feed adapter on
+// MegaETH, decode each event and keep only TRY rows (the adapter emits
+// 8+ feeds; storing all of them would bloat the cache). Cache schema:
+// `{ fromBlock, rows: [{b, li, t, u, v}] }` — block, logIndex, block
+// timestamp, RedStone-source updatedAt, and decoded usdPerTry.
+async function fetchRedstoneTryUpdates() {
+  const cachePath = resolve(DATA_DIR, "logs-redstone-try-megaeth.json");
+  let cached = { fromBlock: REDSTONE_FEED_START_BLOCK, rows: [] };
+  if (existsSync(cachePath)) {
+    cached = JSON.parse(readFileSync(cachePath, "utf8"));
+    if (cached.fromBlock < REDSTONE_FEED_START_BLOCK)
+      cached.fromBlock = REDSTONE_FEED_START_BLOCK;
+  }
+  const seen = new Set(cached.rows.map((r) => `${r.b}-${r.li}`));
+  const PAGE_CAP = 1000;
+  // Etherscan v2 query-timeouts when toBlock is "latest" over wide ranges
+  // even if the actual result count is small. We chunk into block windows
+  // and shrink on cap-hit / timeout. The window adapts so we cover the
+  // whole range with as few calls as possible.
+  let windowSize = parseInt(process.env.REDSTONE_BLOCK_WINDOW || "20000", 10);
+  let cursor = cached.fromBlock;
+  // Get latest MegaETH block once so we know when to stop.
+  let latestBlock;
+  try {
+    const r = await etherscan({
+      chainid: String(REDSTONE_CHAIN_ID),
+      module: "proxy",
+      action: "eth_blockNumber",
+    });
+    latestBlock = parseInt(r, 16);
+  } catch {
+    latestBlock = cursor + 50_000_000; // fallback ceiling
+  }
+  console.log(
+    `  [redstone-try] starting from block ${cursor} (latest=${latestBlock})`,
+  );
+  let pages = 0;
+  while (cursor <= latestBlock) {
+    const toBlock = Math.min(cursor + windowSize, latestBlock);
+    let page;
+    try {
+      page = await etherscan({
+        chainid: String(REDSTONE_CHAIN_ID),
+        module: "logs",
+        action: "getLogs",
+        address: REDSTONE_FEED,
+        fromBlock: String(cursor),
+        toBlock: String(toBlock),
+        topic0: VALUE_UPDATE_TOPIC,
+        page: "1",
+        offset: String(PAGE_CAP),
+      });
+    } catch (err) {
+      // Timeout / "smaller result dataset" — halve the window and retry.
+      if (/timeout|smaller result/i.test(err.message) && windowSize > 1000) {
+        windowSize = Math.max(1000, Math.floor(windowSize / 2));
+        console.warn(
+          `  [redstone-try] timeout, shrinking window to ${windowSize}`,
+        );
+        continue;
+      }
+      throw err;
+    }
+    let kept = 0;
+    let maxBlock = cursor;
+    for (const log of page) {
+      const dec = decodeValueUpdate(log.data || "");
+      if (!dec) continue;
+      const bn = parseInt(log.blockNumber, 16);
+      const li = parseInt(log.logIndex, 16);
+      const ts = parseInt(log.timeStamp, 16);
+      if (bn > maxBlock) maxBlock = bn;
+      if (dec.dataFeedId.toLowerCase() !== TRY_FEED_ID.toLowerCase())
+        continue;
+      const key = `${bn}-${li}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const v = Number(dec.value) / 10 ** REDSTONE_DECIMALS;
+      if (!Number.isFinite(v) || v <= 0) continue;
+      const u = dec.updatedAt > 1e12 ? Math.floor(dec.updatedAt / 1000) : dec.updatedAt;
+      cached.rows.push({ b: bn, li, t: ts, u, v });
+      kept++;
+    }
+    pages++;
+    console.log(
+      `  [redstone-try] [${cursor}..${toBlock}] page=${page.length} TRY-new=${kept} TRY-total=${cached.rows.length}`,
+    );
+    if (page.length >= PAGE_CAP) {
+      // Hit the result cap — shrink the window so we don't miss events.
+      windowSize = Math.max(1000, Math.floor(windowSize / 2));
+      cursor = maxBlock + 1;
+    } else {
+      cursor = toBlock + 1;
+      // Sparse range — grow the window to reduce round-trips.
+      if (page.length < PAGE_CAP / 4) {
+        windowSize = Math.min(200_000, Math.floor(windowSize * 1.5));
+      }
+    }
+    if (pages % 20 === 0) {
+      cached.fromBlock = cursor;
+      writeFileSync(cachePath, JSON.stringify(cached));
+    }
+  }
+  cached.fromBlock = cursor;
+  cached.rows.sort((a, b) => a.b - b.b || a.li - b.li);
+  writeFileSync(cachePath, JSON.stringify(cached));
+  return cached.rows.map((r) => ({
+    blockNumber: r.b,
+    timeStamp: r.t,
+    updatedAt: r.u,
+    usdPerTry: r.v,
+  }));
 }
 
 // Fetch all transactions to `address` whose input begins with `selector`,
@@ -851,6 +1020,142 @@ async function main() {
     );
   }
 
+  // ---- RedStone on-chain TRY/USD (MegaETH) -----------------------------
+  // Additive: we keep the Frankfurter `usdPerTry` series as-is for prod,
+  // and emit a parallel series under `redstone.dailyAvgUsdPerTry` for the
+  // /staging variant to consume. Per-update raw points (`tryUsdUpdates`)
+  // drive the new on-chain TRY/USD chart.
+  console.log("Fetching RedStone TRY/USD updates via Etherscan v2 (chain 4326, MegaETH)...");
+  let redstoneUpdates = [];
+  try {
+    redstoneUpdates = await fetchRedstoneTryUpdates();
+    console.log(`  got ${redstoneUpdates.length} TRY ValueUpdate events`);
+  } catch (err) {
+    console.warn(`  RedStone fetch failed: ${err.message}`);
+  }
+
+  // Live spot from the dedicated Chainlink-style adapter — single eth_call
+  // (selector 0x50d25bcd = `latestAnswer()`). The result is the exact same
+  // value the multi-feed adapter currently has for TRY, but reading it via
+  // the TRY-specific aggregator keeps the source of truth crisp and lets
+  // us add a "now" point even when the trailing event window had no TRY
+  // updates yet for the day. We tag it with the latest known MegaETH block
+  // timestamp via eth_blockNumber + eth_getBlockByNumber.
+  let redstoneLatest = null;
+  try {
+    const ans = await etherscan({
+      chainid: String(REDSTONE_CHAIN_ID),
+      module: "proxy",
+      action: "eth_call",
+      to: REDSTONE_TRY_AGGREGATOR,
+      data: "0x50d25bcd",
+      tag: "latest",
+    });
+    if (ans && ans !== "0x") {
+      const raw = BigInt(ans);
+      const usd = Number(raw) / 10 ** REDSTONE_DECIMALS;
+      const blockHex = await etherscan({
+        chainid: String(REDSTONE_CHAIN_ID),
+        module: "proxy",
+        action: "eth_blockNumber",
+      });
+      const block = parseInt(blockHex, 16);
+      const blk = await etherscan({
+        chainid: String(REDSTONE_CHAIN_ID),
+        module: "proxy",
+        action: "eth_getBlockByNumber",
+        tag: blockHex,
+        boolean: "false",
+      });
+      const ts = parseInt(blk.timestamp, 16);
+      redstoneLatest = {
+        usdPerTry: usd,
+        blockNumber: block,
+        timeStamp: ts,
+        source: REDSTONE_TRY_AGGREGATOR,
+      };
+      console.log(
+        `  live latestAnswer() on ${REDSTONE_TRY_AGGREGATOR}: ${usd.toFixed(8)} USD/TRY @ block ${block}`,
+      );
+      // Append as a fresh sample point, de-duped by exact (timestamp, value)
+      const dup = redstoneUpdates.some(
+        (u) => u.timeStamp === ts && Math.abs(u.usdPerTry - usd) < 1e-12,
+      );
+      if (!dup) {
+        redstoneUpdates = [
+          ...redstoneUpdates,
+          {
+            blockNumber: block,
+            timeStamp: ts,
+            updatedAt: ts,
+            usdPerTry: usd,
+          },
+        ].sort((a, b) => a.timeStamp - b.timeStamp);
+      }
+    }
+  } catch (err) {
+    console.warn(`  RedStone live spot failed: ${err.message}`);
+  }
+  // Group by UTC day → arithmetic mean of usdPerTry per day.
+  const redstoneByDay = new Map(); // ISO day → { sum, n }
+  for (const u of redstoneUpdates) {
+    const isoYmd = isoDay(dayOf(u.timeStamp));
+    const acc = redstoneByDay.get(isoYmd) || { sum: 0, n: 0 };
+    acc.sum += u.usdPerTry;
+    acc.n += 1;
+    redstoneByDay.set(isoYmd, acc);
+  }
+  const redstoneDailyAvg = new Array(days.length).fill(null);
+  let lastAvg = null;
+  for (let i = 0; i < days.length; i++) {
+    const acc = redstoneByDay.get(days[i]);
+    if (acc) lastAvg = acc.sum / acc.n;
+    redstoneDailyAvg[i] = lastAvg;
+  }
+  const firstRedstoneDay = days.findIndex((d) => redstoneByDay.has(d));
+  console.log(
+    firstRedstoneDay >= 0
+      ? `  RedStone covers ${days[firstRedstoneDay]} → ${days.at(-1)} (${redstoneByDay.size} days w/ updates)`
+      : "  No RedStone updates land within the chart window",
+  );
+
+  // Downsample per-update points for the on-chain TRY/USD chart so the
+  // static JSON stays compact (the raw cache can hold 1M+ rows). One median
+  // sample per `REDSTONE_BUCKET_SECS` (default 5 min) is plenty for a
+  // long-window line chart and still shows the intra-day movement.
+  const bucketSecs = Math.max(
+    60,
+    parseInt(process.env.REDSTONE_BUCKET_SECS || "300", 10),
+  );
+  const buckets = new Map(); // bucketKey → array of usdPerTry values
+  for (const u of redstoneUpdates) {
+    const key = Math.floor(u.timeStamp / bucketSecs);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(u.usdPerTry);
+  }
+  const tryUsdSamples = Array.from(buckets.entries())
+    .map(([k, vs]) => {
+      vs.sort((a, b) => a - b);
+      const med = vs[Math.floor(vs.length / 2)];
+      return { t: k * bucketSecs, usd: med };
+    })
+    .sort((a, b) => a.t - b.t);
+
+  const redstoneSnapshot = {
+    source: "MegaEthReferenceMultiFeedAdapterWithoutRoundsV1",
+    contract: REDSTONE_FEED,
+    aggregator: REDSTONE_TRY_AGGREGATOR,
+    chain: "megaeth",
+    chainId: REDSTONE_CHAIN_ID,
+    decimals: REDSTONE_DECIMALS,
+    bucketSecs,
+    rawUpdateCount: redstoneUpdates.length,
+    daysWithUpdates: redstoneByDay.size,
+    latest: redstoneLatest,
+    tryUsdSamples,
+    dailyAvgUsdPerTry: redstoneDailyAvg,
+  };
+
   const wiTryUsd = wiTryTry.map((v, i) =>
     v == null || usdPerTry[i] == null ? null : v * usdPerTry[i],
   );
@@ -895,6 +1200,7 @@ async function main() {
     navMethod: { kind: navMethod.kind, signature: navMethod.signature },
     navEvent: navMethod.signature,
     fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
+    redstone: redstoneSnapshot,
     apy7d,
     days,
     iTrySupply: iTrySupplyDaily,
