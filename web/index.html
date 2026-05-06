@@ -57,6 +57,49 @@
         letter-spacing: 0.08em;
         margin: 0 0 4px;
       }
+      .site-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--fg);
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+      }
+      .site-footer {
+        margin: 32px 32px 24px;
+        padding: 20px 24px;
+        background: var(--panel);
+        border: 1px solid #1f242c;
+        border-radius: 14px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .site-footer .disclaimer {
+        margin: 0 0 10px;
+      }
+      .site-footer .disclaimer b {
+        color: var(--fg);
+      }
+      .site-footer .attribution {
+        margin: 0;
+        text-align: right;
+      }
+      .site-footer a {
+        color: var(--accent-1);
+        text-decoration: none;
+      }
+      .site-footer a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 720px) {
+        .site-footer {
+          margin: 24px 16px 16px;
+          padding: 16px;
+        }
+        .site-footer .attribution {
+          text-align: left;
+        }
+      }
       header p {
         margin: 0;
         color: var(--muted);
@@ -194,6 +237,7 @@
   </head>
   <body>
     <header>
+      <p class="site-title">Unofficial Brix.money Dashboard</p>
       <p class="page-title">brix.money · wiTRY / iTRY daily history</p>
       <p>
         Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
@@ -754,5 +798,17 @@
 
       load();
     </script>
+
+    <footer class="site-footer">
+      <p class="disclaimer">
+        <b>Disclaimer:</b> This is an unofficial dashboard and is not affiliated with brix.money.
+        Data is reconstructed from public on-chain events and may contain inaccuracies, delays, or errors.
+        The author is not responsible for any losses or decisions made based on the charts or data shown here.
+        Always verify with official sources before acting.
+      </p>
+      <p class="attribution">
+        Made by <a href="https://www.linkedin.com/in/gokhanseckin/" target="_blank" rel="noopener noreferrer">Gokhan Seckin</a>
+      </p>
+    </footer>
   </body>
 </html>
