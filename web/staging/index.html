@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>brix.money — wiTRY / iTRY history</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d11;
+        --panel: #14181f;
+        --fg: #e5e7eb;
+        --muted: #8b93a1;
+        --accent-1: #60a5fa;
+        --accent-2: #f59e0b;
+        --accent-3: #34d399;
+        --accent-4: #f472b6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      header {
+        padding: 24px 32px 8px;
+        position: relative;
+      }
+      .last-updated {
+        position: absolute;
+        top: 24px;
+        right: 32px;
+        font-size: 12px;
+        color: var(--muted);
+        text-align: right;
+        line-height: 1.4;
+      }
+      .last-updated b {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      @media (max-width: 720px) {
+        .last-updated {
+          position: static;
+          margin-top: 8px;
+          text-align: left;
+        }
+      }
+      .page-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 4px;
+      }
+      .site-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--fg);
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+      }
+      .site-footer {
+        margin: 32px 32px 24px;
+        padding: 20px 24px;
+        background: var(--panel);
+        border: 1px solid #1f242c;
+        border-radius: 14px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .site-footer .disclaimer {
+        margin: 0 0 10px;
+      }
+      .site-footer .disclaimer b {
+        color: var(--fg);
+      }
+      .site-footer .attribution {
+        margin: 0;
+        text-align: right;
+      }
+      .site-footer a {
+        color: var(--accent-1);
+        text-decoration: none;
+      }
+      .site-footer a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 720px) {
+        .site-footer {
+          margin: 24px 16px 16px;
+          padding: 16px;
+        }
+        .site-footer .attribution {
+          text-align: left;
+        }
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+      header code {
+        color: var(--fg);
+        background: var(--panel);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .hero {
+        display: grid;
+        gap: 16px;
+        padding: 8px 32px 0;
+      }
+      .hero.row-apy {
+        grid-template-columns: repeat(3, 1fr);
+        padding-top: 8px;
+      }
+      .hero.row-apy-variants {
+        grid-template-columns: repeat(3, 1fr);
+        padding-top: 0;
+      }
+      @media (max-width: 720px) {
+        .hero.row-apy-variants {
+          grid-template-columns: 1fr;
+        }
+      }
+      .hero.row-supply {
+        grid-template-columns: repeat(4, 1fr);
+        padding-bottom: 16px;
+      }
+      @media (max-width: 1100px) {
+        .hero.row-supply {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+      }
+      @media (max-width: 720px) {
+        .hero.row-apy {
+          grid-template-columns: 1fr;
+        }
+      }
+      .hero-stat {
+        background: var(--panel);
+        border: 1px solid #1f242c;
+        border-radius: 14px;
+        padding: 18px 22px 20px;
+      }
+      .hero-stat .label {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 8px;
+      }
+      .hero-stat h1 {
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .row-supply .hero-stat h1 {
+        font-size: 30px;
+      }
+      .hero-stat .delta {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .hero-stat.try h1 {
+        color: var(--accent-3);
+      }
+      .hero-stat.usd h1 {
+        color: var(--accent-2);
+      }
+      .hero-stat.itry h1 {
+        color: #22d3ee;
+      }
+      .hero-stat.witry h1 {
+        color: var(--accent-4);
+      }
+      .hero-stat.locked h1 {
+        color: #a78bfa;
+      }
+      .hero-stat.unwrapped h1 {
+        color: var(--accent-1);
+      }
+      .hero-stat h1.neg {
+        color: #fca5a5;
+      }
+      .hero-stat .unit {
+        color: var(--muted);
+        font-size: 18px;
+        font-weight: 500;
+        margin-left: 6px;
+      }
+      main {
+        display: grid;
+        gap: 24px;
+        padding: 16px 32px 32px;
+      }
+      .card {
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 16px 20px 20px;
+        border: 1px solid #1f242c;
+      }
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .card .sub {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .canvas-wrap {
+        position: relative;
+        height: 380px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+        font-size: 12px;
+        color: var(--muted);
+        padding: 0 32px 24px;
+      }
+      .meta b {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      #error {
+        margin: 16px 32px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #3f1d1d;
+        color: #fca5a5;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="background:#7c2d12;color:#fff7ed;padding:8px 32px;font-size:13px;text-align:center;letter-spacing:0.04em;">
+      STAGING · experimenting with alternative APY methodologies · not the live home page
+    </div>
+    <header>
+      <p class="site-title">Unofficial Brix.money Dashboard</p>
+      <p class="page-title">brix.money · wiTRY / iTRY daily history</p>
+      <p>
+        Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
+        iTRY through NAV-driven supply expansion forwarded into the vault.
+      </p>
+      <div class="last-updated" id="last-updated" title="Refreshed every 6 hours by GitHub Actions">—</div>
+    </header>
+
+    <section class="hero row-apy" aria-label="Headline APY indicators">
+      <div class="hero-stat try">
+        <p class="label">APY 7d · TRY (vault yield)</p>
+        <h1 id="apy-try">—</h1>
+        <p class="delta">Annualised from the wiTRY share price in lira</p>
+      </div>
+      <div class="hero-stat try">
+        <p class="label">Yield since inception · TRY</p>
+        <h1><span id="yield-since-inception">—</span><span class="unit">TRY</span></h1>
+        <p class="delta">Total iTRY delivered to the vault as yield (× NAV)</p>
+      </div>
+      <div class="hero-stat usd">
+        <p class="label">APY 7d · USD (holder return)</p>
+        <h1 id="apy-usd">—</h1>
+        <p class="delta">Same window, priced through ECB TRY/USD</p>
+      </div>
+    </section>
+
+    <section class="hero row-apy-variants" aria-label="Alternative APY methodologies">
+      <div class="hero-stat try">
+        <p class="label">APY 7d · TRY (flow)</p>
+        <h1 id="apy-try-flow">—</h1>
+        <p class="delta">
+          Yield delivered in the last 7 days ÷ vault size at window start ×
+          (365 / 7). Treats the recent yield as if it accrued purely over
+          those 7 days — an upper-bound view when coupons are lumpy.
+        </p>
+      </div>
+      <div class="hero-stat try">
+        <p class="label">APY 7d · TRY (smoothed, K=<span id="apy-smooth-k">30</span>d)</p>
+        <h1 id="apy-try-smoothed">—</h1>
+        <p class="delta">
+          Spreads each yield drop linearly over the prior K days before
+          annualising — approximates the underlying T-bill rate when coupons
+          land in arrears. Set <code>APY_SMOOTHING_DAYS</code> in fetch env
+          to change K.
+        </p>
+      </div>
+      <div class="hero-stat try">
+        <p class="label">Δ flow vs share-price</p>
+        <h1 id="apy-try-delta">—</h1>
+        <p class="delta">
+          Gap between flow APY and the share-price APY — large gap means
+          recent vault-supply changes (deposits/withdrawals) skewed the
+          share-price annualisation.
+        </p>
+      </div>
+    </section>
+
+    <section class="hero row-supply" aria-label="Supply breakdown">
+      <div class="hero-stat witry">
+        <p class="label">wiTRY supply</p>
+        <h1><span id="witry-supply">—</span><span class="unit">wiTRY</span></h1>
+        <p class="delta">Shares outstanding in the staking vault</p>
+      </div>
+      <div class="hero-stat itry">
+        <p class="label">iTRY supply</p>
+        <h1><span id="itry-supply">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">All iTRY tokens currently in circulation</p>
+      </div>
+      <div class="hero-stat locked">
+        <p class="label">iTRY locked</p>
+        <h1><span id="itry-locked">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">iTRY currently held inside the wiTRY vault</p>
+      </div>
+      <div class="hero-stat unwrapped">
+        <p class="label">Unwrapped iTRY</p>
+        <h1><span id="unwrapped-itry">—</span><span class="unit">iTRY</span></h1>
+        <p class="delta">iTRY tokens sitting in user wallets</p>
+      </div>
+    </section>
+
+    <div id="error"></div>
+
+    <main>
+      <section class="card">
+        <h2>1 wiTRY share value over time</h2>
+        <p class="sub">
+          Left axis: iTRY per share (<code>totalAssets / totalSupply</code>).
+          Right axis: USD per share (left × NAV × ECB TRY/USD rate). NAV is
+          currently pegged at 1.0 TRY per iTRY, so the USD line tracks the
+          lira's value against the dollar.
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-share"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>iTRY supply & TVL over time (TRY)</h2>
+        <p class="sub">
+          iTRY supply = all minted iTRY × NAV. iTRY TVL = iTRY currently
+          locked inside the wiTRY vault. Lira pricing reflects protocol
+          growth independent of FX moves.
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-tvl-try"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>iTRY supply & TVL over time (USD)</h2>
+        <p class="sub">
+          Same series as the TRY chart above, repriced through the ECB daily
+          TRY/USD reference rate.
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-tvl"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>Primary iTRY issuance</h2>
+        <p class="sub">
+          Fresh iTRY minted in transactions that did <em>not</em> route into
+          the wiTRY vault — i.e. issuance to user wallets and operators
+          rather than vault yield. Bars show daily issuance (left axis),
+          line shows cumulative iTRY issued since the chart start
+          (right axis).
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-primary"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>Yield delivered to wiTRY vault</h2>
+        <p class="sub">
+          On-chain proof of yield: any iTRY transferred into the vault in a
+          transaction that did <em>not</em> mint wiTRY shares is pure yield,
+          since it raises <code>totalAssets</code> without changing
+          <code>totalSupply</code>. Bars show daily delivery (left axis),
+          line shows cumulative iTRY delivered since launch (right axis).
+        </p>
+        <div class="canvas-wrap"><canvas id="chart-yield"></canvas></div>
+      </section>
+    </main>
+
+    <div class="meta" id="meta"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script>
+      const errBox = document.getElementById("error");
+      const showError = (msg) => {
+        errBox.style.display = "block";
+        errBox.textContent = msg;
+      };
+
+      const fmtTry = (v) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "TRY",
+              maximumFractionDigits: v < 1 ? 4 : 2,
+            }).format(v);
+      const fmtUsd = (v) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              maximumFractionDigits: v < 1 ? 4 : 0,
+            }).format(v);
+      const fmtPct = (v) =>
+        v == null || !Number.isFinite(v)
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "percent",
+              maximumFractionDigits: 2,
+              signDisplay: "exceptZero",
+            }).format(v);
+      const fmtNum = (v) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              maximumFractionDigits: 6,
+            }).format(v);
+
+      const baseOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#e5e7eb" } },
+          tooltip: { backgroundColor: "#0b0d11", borderColor: "#1f242c", borderWidth: 1 },
+        },
+        scales: {
+          x: {
+            type: "time",
+            time: { unit: "day", tooltipFormat: "yyyy-MM-dd" },
+            ticks: { color: "#8b93a1", maxRotation: 0, autoSkip: true },
+            grid: { color: "rgba(255,255,255,0.04)" },
+          },
+        },
+      };
+
+      async function load() {
+        let data;
+        try {
+          const res = await fetch("../snapshots.json");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = await res.json();
+        } catch (e) {
+          showError(
+            `Could not load snapshots.json (${e.message}). Run \`npm run fetch\` first.`,
+          );
+          return;
+        }
+
+        const xs = data.days;
+        const last = xs.length - 1;
+
+        function paintApy(id, v) {
+          const el = document.getElementById(id);
+          el.textContent = fmtPct(v);
+          el.classList.toggle("neg", typeof v === "number" && v < 0);
+        }
+        paintApy("apy-try", data.apy7d?.try);
+        paintApy("apy-usd", data.apy7d?.usd);
+        paintApy("apy-try-flow", data.apy7dFlow?.try);
+        paintApy("apy-try-smoothed", data.apy7dSmoothed?.try);
+        const flowVal = data.apy7dFlow?.try;
+        const baseVal = data.apy7d?.try;
+        const delta =
+          typeof flowVal === "number" && typeof baseVal === "number"
+            ? flowVal - baseVal
+            : null;
+        paintApy("apy-try-delta", delta);
+        if (typeof data.apy7dSmoothed?.windowDays === "number") {
+          document.getElementById("apy-smooth-k").textContent =
+            data.apy7dSmoothed.windowDays;
+        }
+
+        const fmtCount = (v) =>
+          v == null
+            ? "—"
+            : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
+        document.getElementById("itry-supply").textContent = fmtCount(
+          (data.iTrySupply || [])[last],
+        );
+        document.getElementById("witry-supply").textContent = fmtCount(
+          (data.witrySupply || [])[last],
+        );
+        document.getElementById("itry-locked").textContent = fmtCount(
+          (data.iTryLocked || [])[last],
+        );
+        document.getElementById("unwrapped-itry").textContent = fmtCount(
+          (data.unwrappedITry || [])[last],
+        );
+        document.getElementById("yield-since-inception").textContent = fmtCount(
+          (data.yieldTryCumulative || data.yieldITryCumulative || [])[last],
+        );
+
+        const generated = new Date(data.generatedAt);
+        const ageMs = Date.now() - generated.getTime();
+        const fmtAge = (ms) => {
+          const m = Math.floor(ms / 60000);
+          if (m < 60) return `${m}m ago`;
+          const h = Math.floor(m / 60);
+          if (h < 24) return `${h}h ${m % 60}m ago`;
+          const d = Math.floor(h / 24);
+          return `${d}d ${h % 24}h ago`;
+        };
+        const offMin = -new Date().getTimezoneOffset();
+        const sign = offMin >= 0 ? "+" : "−";
+        const abs = Math.abs(offMin);
+        const h = Math.floor(abs / 60);
+        const m = abs % 60;
+        const tzLabel = `UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
+        document.getElementById("last-updated").innerHTML =
+          `Last updated <b>${generated.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</b> <span style="color:var(--muted)">(${tzLabel})</span><br />` +
+          `<span title="Refreshed every 6 hours by GitHub Actions">${fmtAge(ageMs)} · auto-refresh every 6h</span>`;
+
+        document.getElementById("meta").innerHTML = `
+          <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
+          <span>Range <b>${xs[0]} → ${xs[last]}</b> (${xs.length} days)</span>
+          <span>NAV method <b>${data.navMethod ? data.navMethod.signature : data.navEvent}</b></span>
+          <span>Latest NAV <b>${fmtTry((data.navTry || data.navUsd)[last])} per iTRY</b></span>
+          <span>TRY/USD <b>${fmtNum((data.usdPerTry || [])[last])}</b> <span style="color:var(--muted)">(${data.fxSource || "—"})</span></span>
+          <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
+          <span>APY 7d (TRY) <b>${fmtPct(data.apy7d?.try)}</b></span>
+          <span>APY 7d (USD) <b>${fmtPct(data.apy7d?.usd)}</b></span>
+          <span>iTRY supply value <b>${fmtUsd((data.iTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.iTryTvlTry || data.iTryTvlUsdc)[last])})</span></span>
+          <span>iTRY TVL <b>${fmtUsd((data.wiTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.wiTryTvlTry || data.wiTryTvlUsdc)[last])})</span></span>
+        `;
+
+        new Chart(document.getElementById("chart-share").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "wiTRY value (iTRY)",
+                data: data.wiTryPerITry,
+                borderColor: "#60a5fa",
+                backgroundColor: "rgba(96,165,250,0.1)",
+                yAxisID: "yITRY",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+              },
+              {
+                label: "wiTRY value (USD)",
+                data: data.wiTryUsd || data.wiTryUsdc,
+                borderColor: "#f59e0b",
+                backgroundColor: "rgba(245,158,11,0.1)",
+                yAxisID: "yUSD",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              yITRY: {
+                position: "left",
+                title: { display: true, text: "iTRY per wiTRY", color: "#8b93a1" },
+                ticks: { color: "#8b93a1" },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+              yUSD: {
+                position: "right",
+                title: { display: true, text: "USD per wiTRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) => "$" + Number(v).toFixed(v < 1 ? 6 : 2),
+                },
+                grid: { drawOnChartArea: false },
+              },
+            },
+            plugins: {
+              ...baseOptions.plugins,
+              tooltip: {
+                ...baseOptions.plugins.tooltip,
+                callbacks: {
+                  label: (ctx) => {
+                    const v = ctx.parsed.y;
+                    if (ctx.dataset.yAxisID === "yUSD")
+                      return `${ctx.dataset.label}: $${Number(v).toFixed(6)}`;
+                    return `${ctx.dataset.label}: ${Number(v).toFixed(6)}`;
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const witrySupplyUsd = (data.witrySupply || []).map((v, i) =>
+          v == null || (data.usdPerTry || [])[i] == null
+            ? null
+            : v * data.usdPerTry[i],
+        );
+        new Chart(document.getElementById("chart-tvl").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "iTRY Supply (USD)",
+                data: data.iTryTvlUsd || data.iTryTvlUsdc,
+                borderColor: "#34d399",
+                backgroundColor: "rgba(52,211,153,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "iTRY TVL (USD)",
+                data: data.wiTryTvlUsd || data.wiTryTvlUsdc,
+                borderColor: "#f472b6",
+                backgroundColor: "rgba(244,114,182,0.15)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "wiTRY supply/shares (× TRY/USD)",
+                data: witrySupplyUsd,
+                borderColor: "#60a5fa",
+                backgroundColor: "rgba(96,165,250,0.05)",
+                borderWidth: 2,
+                borderDash: [4, 3],
+                pointRadius: 0,
+                tension: 0.1,
+                fill: false,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                title: { display: true, text: "USD", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `$${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `$${(v / 1e3).toFixed(1)}K`
+                        : `$${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-primary").getContext("2d"), {
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                type: "bar",
+                label: "Primary iTRY issuance (per day)",
+                data: data.primaryITry || [],
+                backgroundColor: "rgba(74,222,128,0.7)",
+                borderColor: "#4ade80",
+                borderWidth: 1,
+                yAxisID: "y",
+              },
+              {
+                type: "line",
+                label: "Cumulative iTRY issued",
+                data: data.primaryITryCumulative || [],
+                borderColor: "#22d3ee",
+                backgroundColor: "rgba(34,211,238,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: false,
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                position: "left",
+                title: { display: true, text: "iTRY / day", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(1)}K`
+                        : `${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+              y1: {
+                position: "right",
+                title: { display: true, text: "Cumulative iTRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(0)}K`
+                        : `${v}`,
+                },
+                grid: { drawOnChartArea: false },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-yield").getContext("2d"), {
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                type: "bar",
+                label: "Yield delivered (iTRY/day)",
+                data: data.yieldITry || [],
+                backgroundColor: "rgba(250,204,21,0.7)",
+                borderColor: "#facc15",
+                borderWidth: 1,
+                yAxisID: "y",
+              },
+              {
+                type: "line",
+                label: "Cumulative iTRY delivered",
+                data: data.yieldITryCumulative || [],
+                borderColor: "#fb923c",
+                backgroundColor: "rgba(251,146,60,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: false,
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                position: "left",
+                title: { display: true, text: "iTRY / day", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(1)}K`
+                        : `${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+              y1: {
+                position: "right",
+                title: { display: true, text: "Cumulative iTRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `${(v / 1e6).toFixed(2)}M`
+                      : v >= 1e3
+                        ? `${(v / 1e3).toFixed(0)}K`
+                        : `${v}`,
+                },
+                grid: { drawOnChartArea: false },
+              },
+            },
+          },
+        });
+
+        new Chart(document.getElementById("chart-tvl-try").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: xs,
+            datasets: [
+              {
+                label: "iTRY Supply (TRY)",
+                data: data.iTryTvlTry || data.iTryTvlUsdc,
+                borderColor: "#34d399",
+                backgroundColor: "rgba(52,211,153,0.1)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "iTRY TVL (TRY)",
+                data: data.wiTryTvlTry || data.wiTryTvlUsdc,
+                borderColor: "#f472b6",
+                backgroundColor: "rgba(244,114,182,0.15)",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+              },
+              {
+                label: "wiTRY supply/shares",
+                data: data.witrySupply,
+                borderColor: "#60a5fa",
+                backgroundColor: "rgba(96,165,250,0.05)",
+                borderWidth: 2,
+                borderDash: [4, 3],
+                pointRadius: 0,
+                tension: 0.1,
+                fill: false,
+              },
+            ],
+          },
+          options: {
+            ...baseOptions,
+            scales: {
+              ...baseOptions.scales,
+              y: {
+                title: { display: true, text: "TRY", color: "#8b93a1" },
+                ticks: {
+                  color: "#8b93a1",
+                  callback: (v) =>
+                    v >= 1e6
+                      ? `₺${(v / 1e6).toFixed(1)}M`
+                      : v >= 1e3
+                        ? `₺${(v / 1e3).toFixed(1)}K`
+                        : `₺${v}`,
+                },
+                grid: { color: "rgba(255,255,255,0.04)" },
+              },
+            },
+          },
+        });
+      }
+
+      load();
+    </script>
+
+    <footer class="site-footer">
+      <p class="disclaimer">
+        <b>Disclaimer:</b> This is an unofficial dashboard and is not affiliated with brix.money.
+        Data is reconstructed from public on-chain events and may contain inaccuracies, delays, or errors.
+        The author is not responsible for any losses or decisions made based on the charts or data shown here.
+        Always verify with official sources before acting.
+      </p>
+      <p class="attribution">
+        Made by <a href="https://www.linkedin.com/in/gokhanseckin/" target="_blank" rel="noopener noreferrer">Gokhan Seckin</a>
+      </p>
+    </footer>
+  </body>
+</html>

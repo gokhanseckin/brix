@@ -887,6 +887,69 @@ async function main() {
     usd: trailingApy(wiTryUsd, 7),
   };
 
+  // Flow-based 7-day APY: take the actual yield delivered to the vault in
+  // the trailing window and treat it as if it economically belongs to those
+  // 7 days. denominator = vault TRY value at the start of the window.
+  function trailingFlowApy(yieldSeries, denomSeries, window) {
+    const n = yieldSeries.length;
+    const out = new Array(n).fill(null);
+    for (let i = 0; i < n; i++) {
+      if (i < window) continue;
+      const denom = denomSeries[i - window];
+      if (denom == null || denom <= 0) continue;
+      let sum = 0;
+      let ok = true;
+      for (let k = i - window + 1; k <= i; k++) {
+        const v = yieldSeries[k];
+        if (v == null) { ok = false; break; }
+        sum += v;
+      }
+      if (!ok) continue;
+      out[i] = (sum / denom) * (365 / window);
+    }
+    return out;
+  }
+
+  const apy7dFlowSeriesTry = trailingFlowApy(yieldTryDaily, wiTryTvlTry, 7);
+  const apy7dFlowSeriesUsd = trailingFlowApy(yieldUsdDaily, wiTryTvlUsd, 7);
+  const apy7dFlow = {
+    try: apy7dFlowSeriesTry.at(-1),
+    usd: apy7dFlowSeriesUsd.at(-1),
+  };
+
+  // Smoothed APY: spread each day's yield linearly over the prior K days
+  // (default 30, configurable) before computing the trailing flow APY. This
+  // approximates the case where lumpy coupon drops in fact accrued over a
+  // longer past period.
+  const SMOOTH_K = Math.max(
+    1,
+    Number(process.env.APY_SMOOTHING_DAYS) || 30,
+  );
+  function smoothYield(series, k) {
+    const n = series.length;
+    const out = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      const v = series[i];
+      if (!v) continue;
+      const share = v / k;
+      const start = Math.max(0, i - k + 1);
+      for (let d = start; d <= i; d++) out[d] += share;
+    }
+    return out;
+  }
+  const smoothedYieldTry = smoothYield(yieldTryDaily, SMOOTH_K);
+  const smoothedYieldUsd = smoothYield(
+    yieldUsdDaily.map((v) => (v == null ? 0 : v)),
+    SMOOTH_K,
+  );
+  const apy7dSmoothedSeriesTry = trailingFlowApy(smoothedYieldTry, wiTryTvlTry, 7);
+  const apy7dSmoothedSeriesUsd = trailingFlowApy(smoothedYieldUsd, wiTryTvlUsd, 7);
+  const apy7dSmoothed = {
+    try: apy7dSmoothedSeriesTry.at(-1),
+    usd: apy7dSmoothedSeriesUsd.at(-1),
+    windowDays: SMOOTH_K,
+  };
+
   const out = {
     generatedAt: new Date().toISOString(),
     chain: "ethereum",
@@ -896,6 +959,10 @@ async function main() {
     navEvent: navMethod.signature,
     fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
     apy7d,
+    apy7dFlow,
+    apy7dSmoothed,
+    apy7dFlowSeries: { try: apy7dFlowSeriesTry, usd: apy7dFlowSeriesUsd },
+    apy7dSmoothedSeries: { try: apy7dSmoothedSeriesTry, usd: apy7dSmoothedSeriesUsd },
     days,
     iTrySupply: iTrySupplyDaily,
     witrySupply: witrySupplyDaily,
@@ -931,7 +998,7 @@ async function main() {
   console.log(`Wrote ${outPath}`);
   const pct = (v) => (v == null ? "—" : (v * 100).toFixed(2) + "%");
   console.log(
-    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)} | APY 7d TRY=${pct(apy7d.try)} USD=${pct(apy7d.usd)}`,
+    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)} | APY 7d TRY=${pct(apy7d.try)} USD=${pct(apy7d.usd)} | APY 7d flow TRY=${pct(apy7dFlow.try)} | APY 7d smoothed (K=${SMOOTH_K}) TRY=${pct(apy7dSmoothed.try)}`,
   );
 }
 
