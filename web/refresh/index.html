@@ -99,6 +99,54 @@
         color: var(--muted);
       }
       .ago { font-variant-numeric: tabular-nums; }
+      .summary {
+        margin-top: 18px;
+        border: 1px solid #1f242c;
+        border-radius: 10px;
+        background: #0e1117;
+        padding: 14px 16px 6px;
+      }
+      .summary h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .summary h2 + h2 {
+        margin-top: 16px;
+        padding-top: 10px;
+        border-top: 1px solid #1f242c;
+      }
+      .summary table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .summary td {
+        padding: 4px 0;
+        vertical-align: top;
+      }
+      .summary td.k {
+        color: var(--muted);
+        white-space: nowrap;
+        padding-right: 12px;
+      }
+      .summary td.v {
+        text-align: right;
+        font-weight: 500;
+        color: var(--fg);
+      }
+      .summary td.v .sub2 {
+        display: block;
+        color: var(--muted);
+        font-weight: 400;
+        font-size: 11px;
+        margin-top: 1px;
+      }
+      .pill-zero { color: var(--muted); }
     </style>
   </head>
   <body>
@@ -120,6 +168,17 @@
       </div>
 
       <div id="status" class="status idle">Idle. Click "Refresh now" to start.</div>
+
+      <div class="summary" id="summary" style="display:none;">
+        <h2>Latest snapshot summary</h2>
+        <table id="summary-vault"></table>
+        <h2>Today (<span id="summary-today-day">—</span>)</h2>
+        <table id="summary-today"></table>
+        <h2>Last 7 days</h2>
+        <table id="summary-7d"></table>
+        <h2>Since chart start (<span id="summary-since-day">—</span>)</h2>
+        <table id="summary-cum"></table>
+      </div>
 
       <p class="hint">
         After the run shows <b>success</b>, reload the
@@ -148,6 +207,192 @@
         return `(${h}h ${m % 60}m ago)`;
       }
 
+      const fmtCount = (v, frac = 0) =>
+        v == null
+          ? "—"
+          : new Intl.NumberFormat("en-US", { maximumFractionDigits: frac }).format(v);
+      const fmtTry = (v) =>
+        v == null ? "—" : "₺" + fmtCount(v, 0);
+      const fmtUsd = (v) =>
+        v == null ? "—" : "$" + fmtCount(v, 0);
+      const fmtPct = (v) =>
+        v == null || !Number.isFinite(v)
+          ? "—"
+          : new Intl.NumberFormat("en-US", {
+              style: "percent",
+              maximumFractionDigits: 2,
+              signDisplay: "exceptZero",
+            }).format(v);
+
+      function row(k, vMain, sub) {
+        const tr = document.createElement("tr");
+        const tdK = document.createElement("td");
+        tdK.className = "k";
+        tdK.textContent = k;
+        const tdV = document.createElement("td");
+        tdV.className = "v";
+        tdV.innerHTML =
+          vMain +
+          (sub ? `<span class="sub2">${sub}</span>` : "");
+        tr.appendChild(tdK);
+        tr.appendChild(tdV);
+        return tr;
+      }
+      function fillTable(id, rows) {
+        const t = document.getElementById(id);
+        t.innerHTML = "";
+        for (const [k, v, sub] of rows) t.appendChild(row(k, v, sub));
+      }
+
+      function paintSummary(j) {
+        const days = j.days || [];
+        const i = days.length - 1;
+        if (i < 0) return;
+        const j7 = Math.max(0, i - 6); // last 7 days inclusive
+        const sumRange = (arr) => {
+          let s = 0,
+            n = 0;
+          for (let k = j7; k <= i; k++) {
+            const v = arr?.[k];
+            if (typeof v === "number" && v !== 0) {
+              s += v;
+              n++;
+            }
+          }
+          return { sum: s, count: n };
+        };
+
+        const fx = j.usdPerTry?.[i];
+        const navTry = j.navTry?.[i];
+        const wiTryPerITry = j.wiTryPerITry?.[i];
+        const wiTryTry = j.wiTryTry?.[i];
+        const wiTryUsd = j.wiTryUsd?.[i];
+
+        // Vault block
+        fillTable("summary-vault", [
+          [
+            "Snapshot range",
+            `${days[0]} → ${days[i]}`,
+            `${days.length} days`,
+          ],
+          [
+            "iTRY total supply",
+            fmtCount(j.iTrySupply?.[i]),
+            j.iTryTvlTry?.[i] != null
+              ? `${fmtTry(j.iTryTvlTry[i])}  ·  ${fmtUsd(j.iTryTvlUsd?.[i])}`
+              : null,
+          ],
+          [
+            "wiTRY shares outstanding",
+            fmtCount(j.witrySupply?.[i]),
+            null,
+          ],
+          [
+            "iTRY locked in vault",
+            fmtCount(j.iTryLocked?.[i]),
+            j.wiTryTvlTry?.[i] != null
+              ? `${fmtTry(j.wiTryTvlTry[i])}  ·  ${fmtUsd(j.wiTryTvlUsd?.[i])}`
+              : null,
+          ],
+          [
+            "Unwrapped iTRY (wallets)",
+            fmtCount(j.unwrappedITry?.[i]),
+            null,
+          ],
+          [
+            "1 wiTRY share value",
+            wiTryTry != null ? `${wiTryTry.toFixed(6)} TRY` : "—",
+            wiTryUsd != null
+              ? `${wiTryUsd.toFixed(6)} USD  ·  ${wiTryPerITry?.toFixed(8)} iTRY`
+              : null,
+          ],
+          [
+            "NAV (TRY per iTRY)",
+            navTry != null ? navTry.toFixed(6) : "—",
+            null,
+          ],
+          [
+            "TRY/USD (ECB)",
+            fx != null ? fx.toFixed(6) : "—",
+            null,
+          ],
+          [
+            "APY 7d",
+            fmtPct(j.apy7d?.try) + " TRY",
+            fmtPct(j.apy7d?.usd) + " USD",
+          ],
+        ]);
+
+        document.getElementById("summary-today-day").textContent = days[i];
+        const yToday = j.yieldITry?.[i] || 0;
+        const pToday = j.primaryITry?.[i] || 0;
+        fillTable("summary-today", [
+          [
+            "Yield delivered to vault",
+            yToday > 0
+              ? `${fmtCount(yToday, 2)} iTRY`
+              : `<span class="pill-zero">none</span>`,
+            yToday > 0
+              ? `${fmtTry(j.yieldTry?.[i])}  ·  ${fmtUsd(j.yieldUsd?.[i])}`
+              : null,
+          ],
+          [
+            "Primary iTRY issuance",
+            pToday > 0
+              ? `${fmtCount(pToday, 2)} iTRY`
+              : `<span class="pill-zero">none</span>`,
+            pToday > 0
+              ? `${fmtTry(j.primaryTry?.[i])}  ·  ${fmtUsd(j.primaryUsd?.[i])}`
+              : null,
+          ],
+        ]);
+
+        const y7 = sumRange(j.yieldITry);
+        const p7 = sumRange(j.primaryITry);
+        const y7Try = sumRange(j.yieldTry).sum;
+        const y7Usd = sumRange(j.yieldUsd).sum;
+        const p7Try = sumRange(j.primaryTry).sum;
+        const p7Usd = sumRange(j.primaryUsd).sum;
+        fillTable("summary-7d", [
+          [
+            "Yield events",
+            `${y7.count} day${y7.count === 1 ? "" : "s"}`,
+            null,
+          ],
+          [
+            "  total yield",
+            `${fmtCount(y7.sum, 0)} iTRY`,
+            `${fmtTry(y7Try)}  ·  ${fmtUsd(y7Usd)}`,
+          ],
+          [
+            "Primary issuance events",
+            `${p7.count} day${p7.count === 1 ? "" : "s"}`,
+            null,
+          ],
+          [
+            "  total minted",
+            `${fmtCount(p7.sum, 0)} iTRY`,
+            `${fmtTry(p7Try)}  ·  ${fmtUsd(p7Usd)}`,
+          ],
+        ]);
+
+        document.getElementById("summary-since-day").textContent = days[0];
+        fillTable("summary-cum", [
+          [
+            "Total yield delivered",
+            `${fmtCount(j.yieldITryCumulative?.[i], 0)} iTRY`,
+            `${fmtTry(j.yieldTryCumulative?.[i])}`,
+          ],
+          [
+            "Total primary issuance",
+            `${fmtCount(j.primaryITryCumulative?.[i], 0)} iTRY`,
+            null,
+          ],
+        ]);
+
+        document.getElementById("summary").style.display = "block";
+      }
+
       async function refreshLastGen() {
         try {
           const r = await fetch("/snapshots.json", { cache: "no-store" });
@@ -156,6 +401,7 @@
           const t = new Date(j.generatedAt);
           lastGen.textContent = t.toLocaleString();
           lastAgo.textContent = fmtAge(Date.now() - t.getTime());
+          paintSummary(j);
         } catch {}
       }
       refreshLastGen();
