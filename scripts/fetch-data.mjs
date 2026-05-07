@@ -1191,6 +1191,10 @@ async function main() {
     try: trailingApy(wiTryTry, 7),
     usd: trailingApy(wiTryUsd, 7),
   };
+  const apy30d = {
+    try: trailingApy(wiTryTry, 30),
+    usd: trailingApy(wiTryUsd, 30),
+  };
 
   const out = {
     generatedAt: new Date().toISOString(),
@@ -1202,6 +1206,7 @@ async function main() {
     fxSource: fx ? (fx.kind === "flat" ? "TRY_USD env" : "frankfurter.dev (ECB)") : "none",
     redstone: redstoneSnapshot,
     apy7d,
+    apy30d,
     days,
     iTrySupply: iTrySupplyDaily,
     witrySupply: witrySupplyDaily,
@@ -1237,7 +1242,7 @@ async function main() {
   console.log(`Wrote ${outPath}`);
   const pct = (v) => (v == null ? "—" : (v * 100).toFixed(2) + "%");
   console.log(
-    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)} | APY 7d TRY=${pct(apy7d.try)} USD=${pct(apy7d.usd)}`,
+    `Latest: ${days.at(-1)} | wiTRY/iTRY=${wiTryPerITry.at(-1)} | NAV=${navTry.at(-1)} TRY | iTRY TVL=${iTryTvlTry.at(-1)} TRY (${iTryTvlUsd.at(-1)} USD) | wiTRY TVL=${wiTryTvlTry.at(-1)} TRY (${wiTryTvlUsd.at(-1)} USD) | TRY/USD=${usdPerTry.at(-1)} | APY 7d TRY=${pct(apy7d.try)} USD=${pct(apy7d.usd)} | APY 30d TRY=${pct(apy30d.try)} USD=${pct(apy30d.usd)}`,
   );
 }
 
