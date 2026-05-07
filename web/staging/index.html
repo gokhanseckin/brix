@@ -277,6 +277,11 @@
         <h1 id="apy30d-usd">—</h1>
         <p class="delta">Trailing 30-day lira yield ± FX impact</p>
       </div>
+      <div class="hero-stat usd">
+        <p class="label">Yield since inception · USD</p>
+        <h1><span id="yield-since-inception-usd">—</span><span class="unit">USD</span></h1>
+        <p class="delta">Daily TRY yield repriced through ECB TRY/USD, summed</p>
+      </div>
     </section>
 
     <section class="hero row-supply" aria-label="Supply breakdown">
@@ -467,6 +472,12 @@
         document.getElementById("yield-since-inception").textContent = fmtCount(
           (data.yieldTryCumulative || data.yieldITryCumulative || [])[last],
         );
+        const yieldUsdCum = (data.yieldUsd || []).reduce(
+          (s, v) => (Number.isFinite(v) ? s + v : s),
+          0,
+        );
+        document.getElementById("yield-since-inception-usd").textContent =
+          (data.yieldUsd || []).length ? fmtCount(yieldUsdCum) : "—";
 
         const generated = new Date(data.generatedAt);
         const ageMs = Date.now() - generated.getTime();
