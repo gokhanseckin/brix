@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>brix.money · manual snapshot refresh</title>
+    <style>
+      :root {
+        --bg: #0b0d11;
+        --panel: #11141a;
+        --fg: #e5e7eb;
+        --muted: #8b93a1;
+        --accent: #f97316;
+        --ok: #4ade80;
+        --bad: #fca5a5;
+        --warn: #fbbf24;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid #1f242c;
+        border-radius: 14px;
+        padding: 28px 32px 24px;
+        max-width: 560px;
+        width: 100%;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      p.sub {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button {
+        background: var(--accent);
+        color: #000;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .meta b { color: var(--fg); font-weight: 500; }
+      .status {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: #0e1117;
+        border: 1px solid #1f242c;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .status.idle { color: var(--muted); }
+      .status.run  { color: var(--warn); }
+      .status.ok   { color: var(--ok); }
+      .status.err  { color: var(--bad); }
+      a { color: var(--accent); }
+      code {
+        background: #0e1117;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .hint {
+        margin-top: 14px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .ago { font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Manual snapshot refresh</h1>
+      <p class="sub">
+        Triggers the <code>refresh-snapshots</code> GitHub Actions workflow.
+        The job pulls the latest iTRY / wiTRY events from Etherscan and
+        commits an updated <code>snapshots.json</code>. Usually completes in
+        ~30–90 seconds.
+      </p>
+
+      <div class="row">
+        <button id="go">Refresh now</button>
+        <span class="meta">
+          Last snapshot: <b id="last-gen">—</b>
+          <span class="ago" id="last-ago"></span>
+        </span>
+      </div>
+
+      <div id="status" class="status idle">Idle. Click "Refresh now" to start.</div>
+
+      <p class="hint">
+        After the run shows <b>success</b>, reload the
+        <a href="/">home page</a> (or
+        <a href="/staging">/staging</a>) to see the fresh data.
+      </p>
+    </div>
+
+    <script>
+      const btn = document.getElementById("go");
+      const statusEl = document.getElementById("status");
+      const lastGen = document.getElementById("last-gen");
+      const lastAgo = document.getElementById("last-ago");
+
+      function setStatus(kind, msg) {
+        statusEl.className = `status ${kind}`;
+        statusEl.innerHTML = msg;
+      }
+
+      function fmtAge(ms) {
+        const s = Math.floor(ms / 1000);
+        if (s < 60) return `(${s}s ago)`;
+        const m = Math.floor(s / 60);
+        if (m < 60) return `(${m}m ${s % 60}s ago)`;
+        const h = Math.floor(m / 60);
+        return `(${h}h ${m % 60}m ago)`;
+      }
+
+      async function refreshLastGen() {
+        try {
+          const r = await fetch("/snapshots.json", { cache: "no-store" });
+          if (!r.ok) return;
+          const j = await r.json();
+          const t = new Date(j.generatedAt);
+          lastGen.textContent = t.toLocaleString();
+          lastAgo.textContent = fmtAge(Date.now() - t.getTime());
+        } catch {}
+      }
+      refreshLastGen();
+      setInterval(refreshLastGen, 15000);
+
+      async function pollLatestRun(dispatchedAt) {
+        // Find the run that was created at-or-after our dispatch time.
+        const r = await fetch("/api/refresh", { cache: "no-store" });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(
+            `status check failed: ${r.status} ${j.error || ""}`,
+          );
+        }
+        const j = await r.json();
+        const ours = (j.runs || []).find(
+          (run) => new Date(run.created_at).getTime() >= dispatchedAt - 10_000,
+        );
+        return ours;
+      }
+
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        setStatus("run", "Triggering workflow…");
+        let dispatchedAt;
+        try {
+          const r = await fetch("/api/refresh", {
+            method: "POST",
+            cache: "no-store",
+          });
+          const j = await r.json();
+          if (!r.ok) {
+            throw new Error(
+              j.error || `HTTP ${r.status}: ${JSON.stringify(j.detail || j)}`,
+            );
+          }
+          dispatchedAt = new Date(j.dispatchedAt).getTime();
+          setStatus(
+            "run",
+            "Workflow dispatched. Waiting for it to start…",
+          );
+        } catch (e) {
+          setStatus("err", `Could not trigger refresh: ${e.message}`);
+          btn.disabled = false;
+          return;
+        }
+
+        let attempts = 0;
+        const maxAttempts = 90; // ~3 min @ 2s
+        const timer = setInterval(async () => {
+          attempts++;
+          let run;
+          try {
+            run = await pollLatestRun(dispatchedAt);
+          } catch (e) {
+            setStatus("err", `Status check error: ${e.message}`);
+            clearInterval(timer);
+            btn.disabled = false;
+            return;
+          }
+
+          if (!run) {
+            if (attempts > maxAttempts) {
+              clearInterval(timer);
+              setStatus(
+                "err",
+                "Workflow run did not appear within 3 minutes. Check the Actions tab on GitHub.",
+              );
+              btn.disabled = false;
+            } else {
+              setStatus(
+                "run",
+                `Workflow dispatched. Waiting for it to start… (${attempts * 2}s)`,
+              );
+            }
+            return;
+          }
+
+          const link = `<a href="${run.html_url}" target="_blank" rel="noopener">run #${run.run_number}</a>`;
+          if (run.status !== "completed") {
+            setStatus(
+              "run",
+              `Running… ${link} · status <b>${run.status}</b>`,
+            );
+            if (attempts > maxAttempts) {
+              clearInterval(timer);
+              setStatus(
+                "err",
+                `Run is taking longer than expected. ${link}`,
+              );
+              btn.disabled = false;
+            }
+            return;
+          }
+
+          clearInterval(timer);
+          if (run.conclusion === "success") {
+            setStatus(
+              "ok",
+              `Done · ${link} succeeded. Reloading snapshot info…`,
+            );
+            await refreshLastGen();
+          } else {
+            setStatus(
+              "err",
+              `${link} ended with conclusion <b>${run.conclusion}</b>.`,
+            );
+          }
+          btn.disabled = false;
+        }, 2000);
+      });
+    </script>
+  </body>
+</html>
