@@ -243,7 +243,7 @@
         Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
         iTRY through NAV-driven supply expansion forwarded into the vault.
       </p>
-      <div class="last-updated" id="last-updated" title="Refreshed every 6 hours by GitHub Actions">—</div>
+      <div class="last-updated" id="last-updated" title="Refreshed every 4 hours by GitHub Actions">—</div>
     </header>
 
     <section class="hero row-apy" aria-label="Headline APY indicators">
@@ -467,7 +467,7 @@
         const tzLabel = `UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
         document.getElementById("last-updated").innerHTML =
           `Last updated <b>${generated.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</b> <span style="color:var(--muted)">(${tzLabel})</span><br />` +
-          `<span title="Refreshed every 6 hours by GitHub Actions">${fmtAge(ageMs)} · auto-refresh every 6h</span>`;
+          `<span title="Refreshed every 4 hours by GitHub Actions">${fmtAge(ageMs)} · auto-refresh every 4h</span>`;
 
         document.getElementById("meta").innerHTML = `
           <span>Generated <b>${new Date(data.generatedAt).toLocaleString()}</b></span>
