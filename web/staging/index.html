@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>brix.money — wiTRY / iTRY history (staging · RedStone TRY/USD)</title>
+    <title>brix.money — wiTRY / iTRY history (staging)</title>
     <style>
       :root {
         color-scheme: dark;
@@ -237,7 +237,7 @@
   </head>
   <body>
     <div style="background:#7c2d12;color:#fff7ed;padding:8px 32px;font-size:13px;text-align:center;letter-spacing:0.04em;">
-      STAGING · USD repriced from RedStone TRY/USD feed (<a href="https://megaeth.blockscout.com/address/0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F" target="_blank" rel="noopener noreferrer" style="color:#fdba74;text-decoration:underline;">0x1b0F…15a6F</a>) on MegaETH · not the live home page
+      STAGING · not the live home page
     </div>
     <header>
       <p class="site-title">Unofficial Brix.money Dashboard</p>
@@ -245,9 +245,8 @@
       <p>
         Reconstructed from Ethereum mainnet event logs. wiTRY shares accrue
         iTRY through NAV-driven supply expansion forwarded into the vault.
-        On this staging variant, all USD figures are repriced through
-        RedStone's on-chain TRY/USD feed on MegaETH (daily average of every
-        on-chain price update) instead of the ECB business-day reference.
+        USD figures use the ECB daily TRY/USD reference rate (via
+        Frankfurter).
       </p>
       <div class="last-updated" id="last-updated" title="Refreshed every 4 hours by GitHub Actions">—</div>
     </header>
@@ -259,6 +258,11 @@
         <p class="delta">Annualised from the wiTRY share price in lira</p>
       </div>
       <div class="hero-stat try">
+        <p class="label">APY 30d · TRY (vault yield)</p>
+        <h1 id="apy30d-try">—</h1>
+        <p class="delta">Trailing 30-day linear annualisation in lira</p>
+      </div>
+      <div class="hero-stat try">
         <p class="label">Yield since inception · TRY</p>
         <h1><span id="yield-since-inception">—</span><span class="unit">TRY</span></h1>
         <p class="delta">Total iTRY delivered to the vault as yield (× NAV)</p>
@@ -267,6 +271,11 @@
         <p class="label">APY 7d · USD (holder return)</p>
         <h1 id="apy-usd">—</h1>
         <p class="delta">Same window, priced through ECB TRY/USD</p>
+      </div>
+      <div class="hero-stat usd">
+        <p class="label">APY 30d · USD (holder return)</p>
+        <h1 id="apy30d-usd">—</h1>
+        <p class="delta">Trailing 30-day lira yield ± FX impact</p>
       </div>
     </section>
 
@@ -296,24 +305,6 @@
     <div id="error"></div>
 
     <main>
-      <section class="card" id="card-redstone">
-        <h2>TRY/USD on-chain (RedStone, MegaETH)</h2>
-        <p class="sub">
-          Canonical source:
-          <a href="https://megaeth.blockscout.com/address/0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F" target="_blank" rel="noopener noreferrer">RedStone Price Feed for TRY</a>
-          (<code>latestAnswer()</code> spot read), backed by the RedStone
-          <a href="https://megaeth.blockscout.com/address/0x57677Bdc4F24D5c08ddCE87E06670C26a00Cac0b" target="_blank" rel="noopener noreferrer">multi-feed adapter</a>
-          on MegaETH whose <code>ValueUpdate</code> events provide the
-          historical TRY samples. The thin line steps through individual
-          on-chain updates (downsampled to 5-minute medians for rendering);
-          the thick line is the UTC-day arithmetic mean used to reprice
-          all USD figures on this page.
-          <span id="redstone-meta" style="color:var(--muted);"></span>
-        </p>
-        <p class="sub" id="redstone-live" style="color:var(--muted);"></p>
-        <div class="canvas-wrap"><canvas id="chart-redstone"></canvas></div>
-      </section>
-
       <section class="card">
         <h2>1 wiTRY share value over time</h2>
         <p class="sub">
@@ -445,47 +436,7 @@
         const xs = data.days;
         const last = xs.length - 1;
 
-        // ---- Reprice USD series via RedStone daily-avg TRY/USD ----------
-        // The base snapshot ships Frankfurter's ECB rate in `data.usdPerTry`.
-        // On this staging page, if RedStone data is present, swap that
-        // series for `data.redstone.dailyAvgUsdPerTry` and recompute every
-        // USD-denominated derived series so the page is internally
-        // consistent. Days RedStone hasn't covered yet fall back to ECB.
-        const rs = data.redstone;
-        let usdSource = data.fxSource || "—";
-        if (rs && Array.isArray(rs.dailyAvgUsdPerTry)) {
-          const ecb = (data.usdPerTry || []).slice();
-          const repriced = rs.dailyAvgUsdPerTry.map((v, i) =>
-            v == null ? ecb[i] : v,
-          );
-          data.usdPerTry = repriced;
-          const mul = (a, i) =>
-            a == null || repriced[i] == null ? null : a * repriced[i];
-          data.wiTryUsd = (data.wiTryTry || []).map(mul);
-          data.iTryTvlUsd = (data.iTryTvlTry || []).map(mul);
-          data.wiTryTvlUsd = (data.wiTryTvlTry || []).map(mul);
-          data.yieldUsd = (data.yieldTry || []).map(mul);
-          data.primaryUsd = (data.primaryTry || []).map(mul);
-          // Recompute trailing 7-day USD APY off the new wiTRY-USD series.
-          const window = 7;
-          if (data.wiTryUsd.length > window) {
-            const end = data.wiTryUsd.at(-1);
-            const start = data.wiTryUsd[data.wiTryUsd.length - 1 - window];
-            if (
-              end != null &&
-              start != null &&
-              start > 0 &&
-              end > 0
-            ) {
-              const ret = end / start - 1;
-              data.apy7d = data.apy7d || {};
-              data.apy7d.usd = Number.isFinite(ret)
-                ? ret * (365 / window)
-                : null;
-            }
-          }
-          usdSource = `RedStone MegaETH daily avg (${rs.daysWithUpdates}/${xs.length} days; ${rs.rawUpdateCount.toLocaleString()} on-chain updates)`;
-        }
+        const usdSource = data.fxSource || "—";
 
         function paintApy(id, v) {
           const el = document.getElementById(id);
@@ -494,6 +445,8 @@
         }
         paintApy("apy-try", data.apy7d?.try);
         paintApy("apy-usd", data.apy7d?.usd);
+        paintApy("apy30d-try", data.apy30d?.try);
+        paintApy("apy30d-usd", data.apy30d?.usd);
 
         const fmtCount = (v) =>
           v == null
@@ -544,6 +497,8 @@
           <span>1 wiTRY = <b>${fmtNum(data.wiTryPerITry[last])} iTRY</b></span>
           <span>APY 7d (TRY) <b>${fmtPct(data.apy7d?.try)}</b></span>
           <span>APY 7d (USD) <b>${fmtPct(data.apy7d?.usd)}</b></span>
+          <span>APY 30d (TRY) <b>${fmtPct(data.apy30d?.try)}</b></span>
+          <span>APY 30d (USD) <b>${fmtPct(data.apy30d?.usd)}</b></span>
           <span>iTRY supply value <b>${fmtUsd((data.iTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.iTryTvlTry || data.iTryTvlUsdc)[last])})</span></span>
           <span>iTRY TVL <b>${fmtUsd((data.wiTryTvlUsd || [])[last])}</b> <span style="color:var(--muted)">(${fmtTry((data.wiTryTvlTry || data.wiTryTvlUsdc)[last])})</span></span>
         `;
@@ -862,107 +817,7 @@
         });
       }
 
-      function renderRedstoneChart(data) {
-        const card = document.getElementById("card-redstone");
-        const rs = data.redstone;
-        if (!rs || !Array.isArray(rs.tryUsdSamples) || !rs.tryUsdSamples.length) {
-          card.style.display = "none";
-          return;
-        }
-        const samples = rs.tryUsdSamples
-          .filter((p) => p && Number.isFinite(p.usd))
-          .map((p) => ({ x: p.t * 1000, y: p.usd }));
-        const dailyAvg = (rs.dailyAvgUsdPerTry || [])
-          .map((v, i) =>
-            v == null
-              ? null
-              : { x: Date.parse(data.days[i] + "T12:00:00Z"), y: v },
-          )
-          .filter(Boolean);
-
-        const meta = document.getElementById("redstone-meta");
-        if (meta) {
-          meta.textContent =
-            ` · ${rs.rawUpdateCount.toLocaleString()} on-chain updates across ${rs.daysWithUpdates} days · 5-min sample buckets shown.`;
-        }
-        const live = document.getElementById("redstone-live");
-        if (live && rs.latest && rs.latest.usdPerTry) {
-          const t = new Date(rs.latest.timeStamp * 1000);
-          live.innerHTML =
-            `Live spot from <code>latestAnswer()</code>: ` +
-            `<b>$${rs.latest.usdPerTry.toFixed(7)} per 1 TRY</b> ` +
-            `(1 USD ≈ ${(1 / rs.latest.usdPerTry).toFixed(2)} TRY) ` +
-            `· block ${rs.latest.blockNumber.toLocaleString()} · ${t.toISOString().replace('T',' ').slice(0,16)} UTC.`;
-        }
-
-        new Chart(document.getElementById("chart-redstone").getContext("2d"), {
-          type: "line",
-          data: {
-            datasets: [
-              {
-                label: "TRY/USD per on-chain update (5-min median)",
-                data: samples,
-                borderColor: "rgba(96,165,250,0.8)",
-                backgroundColor: "rgba(96,165,250,0.05)",
-                borderWidth: 1,
-                pointRadius: 0,
-                tension: 0,
-                stepped: true,
-                yAxisID: "y",
-              },
-              {
-                label: "TRY/USD daily average (used for repricing)",
-                data: dailyAvg,
-                borderColor: "#f59e0b",
-                backgroundColor: "rgba(245,158,11,0.1)",
-                borderWidth: 2.5,
-                pointRadius: 0,
-                tension: 0.1,
-                yAxisID: "y",
-              },
-            ],
-          },
-          options: {
-            ...baseOptions,
-            parsing: false,
-            scales: {
-              x: {
-                type: "time",
-                time: { unit: "day", tooltipFormat: "yyyy-MM-dd HH:mm 'UTC'" },
-                ticks: { color: "#8b93a1", maxRotation: 0, autoSkip: true },
-                grid: { color: "rgba(255,255,255,0.04)" },
-              },
-              y: {
-                title: { display: true, text: "USD per 1 TRY", color: "#8b93a1" },
-                ticks: {
-                  color: "#8b93a1",
-                  callback: (v) => "$" + Number(v).toFixed(5),
-                },
-                grid: { color: "rgba(255,255,255,0.04)" },
-              },
-            },
-            plugins: {
-              ...baseOptions.plugins,
-              tooltip: {
-                ...baseOptions.plugins.tooltip,
-                callbacks: {
-                  label: (ctx) =>
-                    `${ctx.dataset.label}: $${Number(ctx.parsed.y).toFixed(7)}`,
-                },
-              },
-            },
-          },
-        });
-      }
-
-      load().then(() => {
-        // `load` reads `data` into local scope; we re-load here for the
-        // RedStone chart (small file, cached after first fetch).
-        fetch("../snapshots.json")
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => d && renderRedstoneChart(d))
-          .catch(() => {});
-      });
+      load();
     </script>
 
     <footer class="site-footer">
