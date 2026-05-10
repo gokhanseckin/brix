@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-10T02:00:45.063Z",
+  "generatedAt": "2026-05-10T06:29:18.246Z",
   "chain": "ethereum",
   "contracts": {
     "iTRY": "0xb492B4aFD9658093694CF9452D5C272e8230F3B0",
@@ -24,12 +24,12 @@
     "chainId": 4326,
     "decimals": 8,
     "bucketSecs": 300,
-    "rawUpdateCount": 89,
+    "rawUpdateCount": 92,
     "daysWithUpdates": 7,
     "latest": {
-      "usdPerTry": 0.02206193,
-      "blockNumber": 15581426,
-      "timeStamp": 1778378437,
+      "usdPerTry": 0.02208035,
+      "blockNumber": 15597546,
+      "timeStamp": 1778394557,
       "source": "0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F"
     },
     "tryUsdSamples": [
@@ -238,8 +238,20 @@
         "usd": 0.02206193
       },
       {
-        "t": 1778378400,
-        "usd": 0.02206193
+        "t": 1778384400,
+        "usd": 0.02207938
+      },
+      {
+        "t": 1778392800,
+        "usd": 0.02209602
+      },
+      {
+        "t": 1778393400,
+        "usd": 0.02208035
+      },
+      {
+        "t": 1778394300,
+        "usd": 0.02208035
       }
     ],
     "dailyAvgUsdPerTry": [
@@ -291,7 +303,7 @@
       0.0220842355,
       0.02207157111111111,
       0.02212720575757576,
-      0.022061929999999997
+      0.022076659999999998
     ]
   },
   "apy7d": {
