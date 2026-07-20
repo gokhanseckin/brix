@@ -8,6 +8,17 @@ Everything is built from public Ethereum data (Etherscan v2 API) plus the
 ECB's daily TRY/USD reference rate (Frankfurter) — no protocol-side
 dependencies, no API keys other than Etherscan, no build step.
 
+The repo ships **two pages** off the same dataset:
+
+- **`/`** (live, [brix-tau.vercel.app](https://brix-tau.vercel.app)) — ECB
+  TRY/USD via Frankfurter. The stable, business-day reference variant.
+- **`/staging`** ([brix-tau.vercel.app/staging](https://brix-tau.vercel.app/staging))
+  — same data, but USD figures are repriced through RedStone's on-chain
+  TRY/USD oracle on MegaETH. Adds a "TRY/USD on-chain" chart that overlays
+  individual `ValueUpdate` events with the UTC-day mean used for repricing,
+  plus a live `latestAnswer()` spot read off the canonical TRY price-feed
+  proxy.
+
 ![dashboard preview](https://placehold.co/800x60/0b0d11/8b93a1?text=APY+TRY+•+APY+USD+•+wiTRY+supply+•+iTRY+supply+•+iTRY+TVL+•+Unwrapped+iTRY)
 
 ## Quick start
@@ -143,8 +154,9 @@ USD APY  ≈  TRY APY  −  TRY/USD depreciation rate
 
 | Source | What we use it for |
 |---|---|
-| **Etherscan v2 API** (`api.etherscan.io`) | iTRY/wiTRY `Transfer` logs, NAV-feed `setPrice` txs, contract creation blocks, ABI lookup, `decimals()` reads. Free tier (5 rps) is sufficient. |
-| **Frankfurter** (`api.frankfurter.dev`) | Daily TRY/USD reference rates (ECB). Free, no API key. Forward-filled across weekends/holidays. Override with `TRY_USD=<rate>` env for offline runs. |
+| **Etherscan v2 API** (`api.etherscan.io`) | iTRY/wiTRY `Transfer` logs, NAV-feed `setPrice` txs, contract creation blocks, ABI lookup, `decimals()` reads. Also used as a multichain endpoint (`chainid=4326`) to ingest RedStone TRY `ValueUpdate` events on MegaETH for `/staging`. Free tier (5 rps) is sufficient — steady-state ≈ 300 calls/day, dominated by the MegaETH scan. |
+| **Frankfurter** (`api.frankfurter.dev`) | Daily TRY/USD reference rates (ECB) — drives the `/` (home) page and is the fallback on `/staging` for days RedStone hasn't covered yet. Free, no API key. Forward-filled across weekends/holidays. Override with `TRY_USD=<rate>` env for offline runs. |
+| **RedStone on-chain (MegaETH)** | TRY/USD pricing for `/staging`. We page `ValueUpdate(uint256 value, bytes32 dataFeedId, uint256 updatedAt)` events from the multi-feed adapter `0x57677Bdc4F24D5c08ddCE87E06670C26a00Cac0b`, filter to the TRY data feed, and average per UTC day. We also `eth_call latestAnswer()` on the dedicated TRY price-feed proxy `0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F` for the live spot rate. |
 | **Chart.js + chartjs-adapter-date-fns** (CDN) | Rendering only. Loaded directly from jsDelivr in the static page. |
 
 No protocol-side endpoints (no brix.money API), no other oracles.
@@ -160,7 +172,8 @@ are reconstructed entirely from event logs and transactions:
 | iTRY held by wiTRY (vault TVL) | iTRY `Transfer` events with the wiTRY contract as sender/recipient |
 | wiTRY total supply | wiTRY `Transfer` mints minus burns |
 | NAV value | Last `setPrice(uint256)` tx to the NAV feed at/before each day |
-| TRY/USD | ECB business-day rate for each day (forward-filled on weekends) |
+| TRY/USD (home `/`) | ECB business-day rate for each day (forward-filled on weekends) |
+| TRY/USD (`/staging`) | Arithmetic mean of every RedStone `ValueUpdate` for the TRY feed in that UTC day on MegaETH; falls back to the ECB rate on days with no on-chain TRY events. The `/staging` script overrides `data.usdPerTry` client-side from `data.redstone.dailyAvgUsdPerTry` and recomputes every USD-derived series and the 7-day USD APY. |
 
 All events are merged into a single `(blockNumber, logIndex)`-sorted stream
 and replayed once. At each UTC-midnight boundary the running counters are
@@ -171,11 +184,13 @@ price which is `null` while no shares exist.
 ## Layout
 
 ```
-scripts/fetch-data.mjs    Etherscan ingest, FX fetch, daily replay
-web/index.html            Single-file Chart.js renderer + hero cards
+scripts/fetch-data.mjs    Etherscan ingest, FX fetch, RedStone scan, daily replay
+web/index.html            Home page (ECB-priced USD)
+web/staging/index.html    Staging page (RedStone-priced USD + on-chain TRY chart)
 web/snapshots.json        Generated artifact (committed only as needed)
 bootstrap.sh              One-shot install + run for fresh Linux boxes
-data/                     Cached event logs and FX rates (gitignored)
+data/                     Cached event logs and FX rates (gitignored), incl.
+                          logs-redstone-try-megaeth.json for the TRY feed
 ```
 
 The fetch script is a single Node module with zero runtime dependencies
@@ -200,14 +215,34 @@ function selectors without pulling in `ethers`/`viem`).
 Only the iTRY token, the wiTRY vault, and the NAV feed are read by this
 dashboard. The other addresses are listed for reference.
 
+## Contracts (MegaETH, used by `/staging`)
+
+| Contract | Address |
+|---|---|
+| RedStone multi-feed adapter (`MegaEthReferenceMultiFeedAdapterWithoutRoundsV1`, emits `ValueUpdate(value, dataFeedId, updatedAt)` for ~12 feeds incl. TRY) | `0x57677Bdc4F24D5c08ddCE87E06670C26a00Cac0b` |
+| RedStone TRY price-feed proxy (Chainlink `AggregatorV3Interface`; `description() == "RedStone Price Feed for TRY"`; reads delegate into the multi-feed adapter) | `0x1b0FDa12D125B864756Bbf191ad20eaB10915a6F` |
+
+TRY data feed id (bytes32, ASCII `"TRY"` right-padded):
+`0x5452590000000000000000000000000000000000000000000000000000000000`. Decimals: 8.
+The TRY feed first appears on the multi-feed adapter at block 15,109,340
+(2026-05-04 14:52 UTC); earlier blocks emit `ValueUpdate` for other feeds
+only, which is why `/staging`'s on-chain chart starts on 2026-05-04 even
+though the rest of the dashboard goes back further. (We checked: the same
+multi-feed adapter is deployed on MegaETH testnet `chain 6343` but has
+zero `ValueUpdate` events ever, so there's no older history to backfill
+from.)
+
 ## Configuration env vars
 
 | Var | Default | Purpose |
 |---|---|---|
-| `ETHERSCAN_API_KEY` | — (required) | Etherscan v2 API key |
+| `ETHERSCAN_API_KEY` | — (required) | Etherscan v2 API key. The same key works for chain 1 (Ethereum, used by `/`) and chain 4326 (MegaETH, used by `/staging`). |
 | `CHART_START_DATE` | `2026-03-23` | First day on the X axis (`YYYY-MM-DD`) |
-| `TRY_USD` | — | If set, use this flat TRY/USD rate instead of fetching daily ECB rates (useful for offline runs) |
+| `TRY_USD` | — | If set, use this flat TRY/USD rate instead of fetching daily ECB rates (useful for offline runs). Bypasses Frankfurter; does not affect the RedStone scan. |
 | `NAV_DECIMALS` | discovered, falls back to 18 | Override for the NAV feed's decimal precision |
+| `REDSTONE_FROM_BLOCK` | `15100000` | First MegaETH block the RedStone TRY scan considers. The default sits just before the first TRY `ValueUpdate` (block 15,109,340). Lower values waste calls; higher values truncate history. |
+| `REDSTONE_BLOCK_WINDOW` | `20000` | Initial block window per Etherscan v2 `getLogs` page. Halves on cap-hit / query-timeout, grows on sparse pages — usually self-tunes. |
+| `REDSTONE_BUCKET_SECS` | `300` | Bucket size (seconds) for the per-update samples emitted to `snapshots.json` (`redstone.tryUsdSamples`). One median price per bucket — keeps the JSON small while preserving intra-day shape on the chart. |
 
 ## Deploy
 
